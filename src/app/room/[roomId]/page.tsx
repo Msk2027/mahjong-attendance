@@ -8,378 +8,151 @@ import { supabase } from "@/lib/supabaseClient";
 type Room = {
   id: string;
   name: string;
-  created_at: string;
+  invite_code: string | null;
 };
-
-type Member = {
-  user_id: string;
-  display_name: string;
-  role: string;
-};
-
-type EventRow = {
-  id: string;
-  title: string;
-  starts_at: string;
-  required_yes: number;
-  created_at: string;
-};
-
-type RsvpRow = {
-  event_id: string;
-  user_id: string;
-  status: "yes" | "maybe" | "no";
-};
-
-function formatJstTitle(iso: string) {
-  // 例：2025/12/19(金) 21:00
-  const d = new Date(iso);
-  return new Intl.DateTimeFormat("ja-JP", {
-    timeZone: "Asia/Tokyo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(d);
-}
-
-function formatJstDateOnly(iso: string) {
-  // 例：2025/12/19(金)
-  const d = new Date(iso);
-  return new Intl.DateTimeFormat("ja-JP", {
-    timeZone: "Asia/Tokyo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    weekday: "short",
-  }).format(d);
-}
-
-function formatJstTimeOnly(iso: string) {
-  // 例：21:00
-  const d = new Date(iso);
-  return new Intl.DateTimeFormat("ja-JP", {
-    timeZone: "Asia/Tokyo",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(d);
-}
 
 export default function RoomPage() {
   const router = useRouter();
-  const { roomId } = useParams<{ roomId: string }>();
+  const params = useParams();
 
-  const [me, setMe] = useState<{ id: string; email: string | null } | null>(null);
-  const [room, setRoom] = useState<Room | null>(null);
-  const [members, setMembers] = useState<Member[]>([]);
-  const [events, setEvents] = useState<EventRow[]>([]);
-  const [rsvps, setRsvps] = useState<RsvpRow[]>([]);
+  const roomId = useMemo(() => {
+    const v = (params as any)?.roomId;
+    if (typeof v === "string") return v;
+    if (Array.isArray(v)) return v[0];
+    return "";
+  }, [params]);
 
-  // 作成フォーム（タイトルは不要なので持たない）
-  const [startsAtLocal, setStartsAtLocal] = useState("");
-  const [requiredYes, setRequiredYes] = useState(4);
-
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [room, setRoom] = useState<Room | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // owner 判定
-  const isOwner = useMemo(() => {
-    if (!me) return false;
-    return members.some((m) => m.user_id === me.id && m.role === "owner");
-  }, [me, members]);
-
-  // RSVP集計
-  const rsvpMap = useMemo(() => {
-    const map = new Map<string, Map<string, RsvpRow["status"]>>();
-    for (const r of rsvps) {
-      if (!map.has(r.event_id)) map.set(r.event_id, new Map());
-      map.get(r.event_id)!.set(r.user_id, r.status);
+  const copy = async (text: string, doneMsg: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      alert(doneMsg);
+    } catch {
+      alert("コピーに失敗しました（ブラウザ権限を確認）");
     }
-    return map;
-  }, [rsvps]);
-
-  const countsFor = (eventId: string) => {
-    const m = rsvpMap.get(eventId) ?? new Map<string, RsvpRow["status"]>();
-    let yes = 0,
-      maybe = 0,
-      no = 0;
-    for (const s of m.values()) {
-      if (s === "yes") yes++;
-      else if (s === "no") no++;
-      else maybe++;
-    }
-    return { yes, maybe, no };
-  };
-
-  const myStatusFor = (eventId: string): "yes" | "maybe" | "no" => {
-    if (!me) return "maybe";
-    return (rsvpMap.get(eventId)?.get(me.id) as any) ?? "maybe";
-  };
-
-  const labelOf = (s: "yes" | "maybe" | "no") => (s === "yes" ? "参加" : s === "no" ? "不参加" : "未定");
-
-  // 初期ロード
-  const loadAll = async () => {
-    setError(null);
-    setLoading(true);
-
-    const { data: userData, error: userErr } = await supabase.auth.getUser();
-    if (userErr) {
-      setError(userErr.message);
-      setLoading(false);
-      return;
-    }
-    if (!userData.user) {
-      router.push("/login");
-      return;
-    }
-    setMe({ id: userData.user.id, email: userData.user.email ?? null });
-
-    const { data: roomData, error: roomErr } = await supabase
-      .from("rooms")
-      .select("id,name,created_at")
-      .eq("id", roomId)
-      .single();
-
-    if (roomErr) {
-      setError(roomErr.message);
-      setLoading(false);
-      return;
-    }
-    setRoom(roomData);
-
-    const { data: memData, error: memErr } = await supabase
-      .from("room_members")
-      .select("user_id,display_name,role,created_at")
-      .eq("room_id", roomId)
-      .order("created_at", { ascending: true });
-
-    if (memErr) {
-      setError(memErr.message);
-      setLoading(false);
-      return;
-    }
-    setMembers(memData ?? []);
-
-    const nowIso = new Date().toISOString();
-    const { data: evData, error: evErr } = await supabase
-      .from("events")
-      .select("id,title,starts_at,required_yes,created_at")
-      .eq("room_id", roomId)
-      .gte("starts_at", nowIso)
-      .order("starts_at", { ascending: true })
-      .limit(10);
-
-    if (evErr) {
-      setError(evErr.message);
-      setLoading(false);
-      return;
-    }
-    const evs = evData ?? [];
-    setEvents(evs);
-
-    if (evs.length > 0) {
-      const ids = evs.map((e) => e.id);
-      const { data: rData, error: rErr } = await supabase
-        .from("rsvps")
-        .select("event_id,user_id,status")
-        .in("event_id", ids);
-
-      if (rErr) {
-        setError(rErr.message);
-        setLoading(false);
-        return;
-      }
-      setRsvps(rData ?? []);
-    } else {
-      setRsvps([]);
-    }
-
-    setLoading(false);
   };
 
   useEffect(() => {
-    loadAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId]);
+    (async () => {
+      setError(null);
+      setLoading(true);
 
-  // イベント作成（タイトルは日付から自動生成）
-  const createEvent = async () => {
-    setError(null);
-    if (!me) return;
+      try {
+        if (!roomId) return;
 
-    if (!startsAtLocal) {
-      setError("日時を入力してください");
-      return;
-    }
+        // ログイン確認
+        const { data: sess } = await supabase.auth.getSession();
+        if (!sess.session) {
+          router.replace("/login");
+          return;
+        }
 
-    const startsIso = new Date(startsAtLocal).toISOString();
-    const autoTitle = formatJstTitle(startsIso);
+        // ルーム取得（RLSでmemberのみ見える想定）
+        const { data, error } = await supabase
+          .from("rooms")
+          .select("id,name,invite_code")
+          .eq("id", roomId)
+          .single();
 
-    const { error } = await supabase.from("events").insert({
-      room_id: roomId,
-      title: autoTitle, // DBのtitleを日付文字列にする
-      starts_at: startsIso,
-      required_yes: requiredYes,
-      created_by: me.id,
-    });
+        if (error) throw new Error(error.message);
 
-    if (error) {
-      setError(error.message);
-      return;
-    }
-
-    setStartsAtLocal("");
-    await loadAll();
-  };
-
-  // RSVP
-  const setMyRsvp = async (eventId: string, status: "yes" | "maybe" | "no") => {
-    setError(null);
-    if (!me) return;
-
-    const { error } = await supabase.from("rsvps").upsert(
-      { event_id: eventId, user_id: me.id, status },
-      { onConflict: "event_id,user_id" }
-    );
-
-    if (error) {
-      setError(error.message);
-      return;
-    }
-
-    await loadAll();
-  };
-
-  // 削除
-  const deleteEvent = async (eventId: string) => {
-    setError(null);
-
-    if (!isOwner) {
-      setError("削除できるのはownerのみです");
-      return;
-    }
-
-    const ok = confirm("この候補日を削除します。よろしいですか？");
-    if (!ok) return;
-
-    const { error } = await supabase.from("events").delete().eq("id", eventId);
-    if (error) {
-      setError(error.message);
-      return;
-    }
-
-    await loadAll();
-  };
+        setRoom(data as Room);
+      } catch (e: any) {
+        setError(e?.message ?? "Unknown error");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [roomId, router]);
 
   if (loading) return <p className="p-6">Loading...</p>;
 
   return (
-    <main className="p-6 max-w-4xl mx-auto">
-      <Link href="/" className="underline text-sm">
-        ← ルーム一覧へ
-      </Link>
-
-      <h1 className="text-2xl font-bold mt-2">{room?.name}</h1>
-
-      {error && <p className="text-red-600 mt-3">{error}</p>}
-
-      {/* 作成 */}
-      <section className="mt-6 border rounded p-4">
-        <h2 className="font-semibold">日程を追加</h2>
-
-        <div className="mt-3 grid gap-3">
-          <div>
-            <label className="text-sm text-gray-700">開始日時（JST）</label>
-            <input
-              type="datetime-local"
-              className="border rounded px-3 py-2 w-full mt-1"
-              value={startsAtLocal}
-              onChange={(e) => setStartsAtLocal(e.target.value)}
-            />
+    <main className="p-6 max-w-2xl mx-auto">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <Link className="underline text-sm" href="/">
+            ← 戻る
+          </Link>
+          <h1 className="text-2xl font-bold mt-2">{room?.name ?? "ルーム"}</h1>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <span className="badge">Room ID: {roomId}</span>
           </div>
-
-          <div>
-            <label className="text-sm text-gray-700">最低人数</label>
-            <input
-              type="number"
-              min={2}
-              max={12}
-              className="border rounded px-3 py-2 w-full mt-1"
-              value={requiredYes}
-              onChange={(e) => setRequiredYes(Number(e.target.value))}
-            />
-          </div>
-
-          <button className="bg-blue-600 text-white rounded px-4 py-2" onClick={createEvent}>
-            追加
-          </button>
-
-          <p className="text-xs text-gray-500">
-          </p>
         </div>
+
+        <button
+          className="btn"
+          onClick={async () => {
+            await supabase.auth.signOut();
+            router.replace("/login");
+          }}
+        >
+          ログアウト
+        </button>
+      </div>
+
+      {error && (
+        <div className="mt-4 card" style={{ borderColor: "rgba(239, 68, 68, 0.35)", background: "rgba(127, 29, 29, 0.25)" }}>
+          <p className="text-sm">エラー：{error}</p>
+        </div>
+      )}
+
+      {/* 招待ボックス */}
+      <section className="mt-6 card">
+        <h2 className="font-semibold">招待</h2>
+        <p className="text-sm card-muted mt-1">
+          URLを送るか、招待コードを送れば参加できます。
+        </p>
+
+        {!room?.invite_code ? (
+          <p className="text-sm mt-3" style={{ color: "rgba(236,253,245,0.85)" }}>
+            招待コードが見つかりません（rooms.invite_code を確認してね）
+          </p>
+        ) : (
+          <>
+            <div className="mt-4">
+              <p className="text-xs card-muted">招待URL</p>
+              <p className="text-sm font-mono mt-1 break-all">
+                {`${window.location.origin}/join/${room.invite_code}`}
+              </p>
+              <button
+                className="btn mt-2"
+                onClick={() =>
+                  copy(
+                    `${window.location.origin}/join/${room.invite_code}`,
+                    "招待URLをコピーしました！"
+                  )
+                }
+              >
+                URLコピー
+              </button>
+            </div>
+
+            <div className="mt-4">
+              <p className="text-xs card-muted">招待コード</p>
+              <p className="text-sm font-mono mt-1">{room.invite_code}</p>
+              <button
+                className="btn mt-2"
+                onClick={() => copy(room.invite_code!, "招待コードをコピーしました！")}
+              >
+                コードコピー
+              </button>
+            </div>
+          </>
+        )}
       </section>
 
-      {/* 一覧 */}
-      <section className="mt-6">
-        <h2 className="font-semibold">候補日程</h2>
-
-        {events.length === 0 ? (
-          <p className="text-sm text-gray-600 mt-2">まだ候補日がありません。</p>
-        ) : (
-          <div className="mt-3 space-y-3">
-            {events.map((ev) => {
-              const { yes, maybe, no } = countsFor(ev.id);
-              const ok = yes >= ev.required_yes;
-              const my = myStatusFor(ev.id);
-
-              // “日付がタイトル”っぽく見える表示
-              const dateTitle = formatJstDateOnly(ev.starts_at);
-              const timeText = formatJstTimeOnly(ev.starts_at);
-
-              return (
-                <div key={ev.id} className="border rounded p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-lg font-semibold">{dateTitle}</div>
-                      <div className="text-sm text-gray-600">開始：{timeText}</div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <div className="text-sm border px-2 py-1 rounded">
-                        {ok ? `開催確定（参加 ${yes}/${ev.required_yes}）` : `未成立（あと ${ev.required_yes - yes} 人）`}
-                      </div>
-
-                      {isOwner && (
-                        <button className="text-sm text-red-600 underline" onClick={() => deleteEvent(ev.id)}>
-                          削除
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-2 text-sm text-gray-700">
-                    参加：{yes} ／ 未定：{maybe} ／ 不参加：{no}　|　あなた：{labelOf(my)}
-                  </div>
-
-                  <div className="mt-3 flex gap-2 flex-wrap">
-                    <button onClick={() => setMyRsvp(ev.id, "yes")} className="border px-3 py-2 rounded">
-                      参加
-                    </button>
-                    <button onClick={() => setMyRsvp(ev.id, "maybe")} className="border px-3 py-2 rounded">
-                      未定
-                    </button>
-                    <button onClick={() => setMyRsvp(ev.id, "no")} className="border px-3 py-2 rounded">
-                      不参加
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+      {/* ここに今後「出欠」「日程」「メンバー一覧」を載せていく */}
+      <section className="mt-4 card">
+        <h2 className="font-semibold">このルームでできること（今後）</h2>
+        <ul className="mt-2 text-sm card-muted list-disc pl-5 space-y-1">
+          <li>日程候補の追加・出欠</li>
+          <li>メンバー一覧（Admin/Member）</li>
+          <li>ゲスト追加（臨時参加者）</li>
+        </ul>
       </section>
     </main>
   );
