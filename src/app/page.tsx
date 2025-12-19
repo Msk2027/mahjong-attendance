@@ -9,6 +9,7 @@ type Room = {
   id: string;
   name: string;
   created_at: string;
+  invite_code?: string | null;
 };
 
 export default function Home() {
@@ -21,6 +22,10 @@ export default function Home() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [roomName, setRoomName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
+
+  // 招待情報表示用
+  const [lastInvite, setLastInvite] = useState<{ code: string; url: string } | null>(null);
+
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
@@ -30,7 +35,6 @@ export default function Home() {
     try {
       const { data: userData, error: userErr } = await supabase.auth.getUser();
 
-      // ✅ 「セッション無し」はエラー扱いせずログインへ
       if (userErr?.message?.includes("Auth session missing")) {
         router.push("/login");
         return;
@@ -54,9 +58,10 @@ export default function Home() {
       setDisplayName(prof?.display_name ?? null);
 
       // 自分が所属しているルームだけ取得
+      // rooms の invite_code も取る（招待表示のため）
       const { data, error } = await supabase
         .from("room_members")
-        .select("rooms(id,name,created_at)")
+        .select("rooms(id,name,created_at,invite_code)")
         .eq("user_id", userData.user.id);
 
       if (error) throw new Error(error.message);
@@ -78,7 +83,6 @@ export default function Home() {
   useEffect(() => {
     load();
 
-    // ✅ ログイン/ログアウトに反応して画面を更新
     const { data } = supabase.auth.onAuthStateChange(() => {
       load();
     });
@@ -91,6 +95,7 @@ export default function Home() {
 
   const createRoom = async () => {
     setError(null);
+    setLastInvite(null);
 
     try {
       const { data: userData, error: userErr } = await supabase.auth.getUser();
@@ -110,10 +115,11 @@ export default function Home() {
       const name = roomName.trim();
       if (!name) throw new Error("ルーム名を入力してください");
 
+      // invite_code も一緒に受け取る
       const { data: room, error: roomErr } = await supabase
         .from("rooms")
         .insert({ name, created_by: user.id })
-        .select("id,name,created_at")
+        .select("id,name,created_at,invite_code")
         .single();
 
       if (roomErr) throw new Error(roomErr.message);
@@ -130,6 +136,15 @@ export default function Home() {
       if (memErr) throw new Error(memErr.message);
 
       setRoomName("");
+
+      const code = (room as any).invite_code as string | null | undefined;
+      if (code) {
+        const url = `${location.origin}/join/${code}`;
+        setLastInvite({ code, url });
+      } else {
+        setLastInvite(null);
+      }
+
       await load();
     } catch (e: any) {
       setError(e?.message ?? "Unknown error");
@@ -140,6 +155,15 @@ export default function Home() {
     const code = inviteCode.trim();
     if (!code) return;
     router.push(`/join/${code}`);
+  };
+
+  const copy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      alert("コピーしました！");
+    } catch {
+      alert("コピーに失敗しました（ブラウザの権限を確認）");
+    }
   };
 
   const signOut = async () => {
@@ -192,6 +216,29 @@ export default function Home() {
             作成
           </button>
         </div>
+
+        {/* 作成直後の招待情報 */}
+        {lastInvite && (
+          <div className="mt-4 border rounded p-3 bg-gray-50">
+            <p className="text-sm font-medium">招待リンク</p>
+            <p className="text-xs text-gray-600 mt-1 break-all">{lastInvite.url}</p>
+            <div className="mt-2 flex gap-2">
+              <button className="border rounded px-3 py-2 text-sm" onClick={() => copy(lastInvite.url)}>
+                URLをコピー
+              </button>
+              <button className="border rounded px-3 py-2 text-sm" onClick={() => copy(lastInvite.code)}>
+                招待コードをコピー
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 招待コードが返ってこない場合のヒント */}
+        {!lastInvite && (
+          <p className="text-xs text-gray-600 mt-3">
+            ※ 招待コードが表示されない場合、DB側で invite_code の自動生成設定が必要です。
+          </p>
+        )}
       </section>
 
       {/* ルーム参加（招待コード） */}
@@ -215,6 +262,7 @@ export default function Home() {
       {/* 参加中のルーム */}
       <section className="mt-6">
         <h2 className="font-semibold">参加中のルーム</h2>
+
         {rooms.length === 0 ? (
           <p className="text-gray-600 text-sm mt-2">まだルームがありません。</p>
         ) : (
@@ -224,7 +272,23 @@ export default function Home() {
                 <Link className="font-medium underline" href={`/room/${r.id}`}>
                   {r.name}
                 </Link>
-                <div className="text-xs text-gray-600 mt-1">{r.id}</div>
+
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {r.invite_code ? (
+                    <>
+                      <span className="text-xs text-gray-600">招待コード：</span>
+                      <span className="text-xs font-mono">{r.invite_code}</span>
+                      <button
+                        className="border rounded px-2 py-1 text-xs"
+                        onClick={() => copy(`${location.origin}/join/${r.invite_code}`)}
+                      >
+                        招待URLコピー
+                      </button>
+                    </>
+                  ) : (
+                    <span className="text-xs text-gray-600">（招待コード未設定）</span>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
