@@ -23,10 +23,17 @@ export default function Home() {
   const [roomName, setRoomName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
 
-  // 招待情報表示用
   const [lastInvite, setLastInvite] = useState<{ code: string; url: string } | null>(null);
-
   const [error, setError] = useState<string | null>(null);
+
+  const copy = async (text: string, doneMsg: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      alert(doneMsg);
+    } catch {
+      alert("コピーに失敗しました（ブラウザ権限を確認）");
+    }
+  };
 
   const load = async () => {
     setError(null);
@@ -48,7 +55,6 @@ export default function Home() {
 
       setEmail(userData.user.email ?? null);
 
-      // profiles（無くてもOK）
       const { data: prof } = await supabase
         .from("profiles")
         .select("display_name")
@@ -57,8 +63,6 @@ export default function Home() {
 
       setDisplayName(prof?.display_name ?? null);
 
-      // 自分が所属しているルームだけ取得
-      // rooms の invite_code も取る（招待表示のため）
       const { data, error } = await supabase
         .from("room_members")
         .select("rooms(id,name,created_at,invite_code)")
@@ -82,14 +86,8 @@ export default function Home() {
 
   useEffect(() => {
     load();
-
-    const { data } = supabase.auth.onAuthStateChange(() => {
-      load();
-    });
-
-    return () => {
-      data.subscription.unsubscribe();
-    };
+    const { data } = supabase.auth.onAuthStateChange(() => load());
+    return () => data.subscription.unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -115,7 +113,6 @@ export default function Home() {
       const name = roomName.trim();
       if (!name) throw new Error("ルーム名を入力してください");
 
-      // invite_code も一緒に受け取る
       const { data: room, error: roomErr } = await supabase
         .from("rooms")
         .insert({ name, created_by: user.id })
@@ -157,15 +154,6 @@ export default function Home() {
     router.push(`/join/${code}`);
   };
 
-  const copy = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      alert("コピーしました！");
-    } catch {
-      alert("コピーに失敗しました（ブラウザの権限を確認）");
-    }
-  };
-
   const signOut = async () => {
     await supabase.auth.signOut();
     router.push("/login");
@@ -178,7 +166,7 @@ export default function Home() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">麻雀出欠ボード</h1>
-          <p className="text-sm text-gray-600 mt-1">
+          <p className="text-sm card-muted mt-1">
             ログイン中：{displayName ?? "未設定"}（{email ?? "unknown"}）
           </p>
           <div className="mt-1">
@@ -188,107 +176,108 @@ export default function Home() {
           </div>
         </div>
 
-        <button className="text-sm text-red-600" onClick={signOut}>
+        <button className="btn" onClick={signOut}>
           ログアウト
         </button>
       </div>
 
       {error && (
-        <div className="mt-4 border rounded p-3 text-sm text-red-700 bg-red-50">
-          エラー：{error}
+        <div
+          className="mt-4 card"
+          style={{
+            borderColor: "rgba(239, 68, 68, 0.35)",
+            background: "rgba(127, 29, 29, 0.25)",
+          }}
+        >
+          <p className="text-sm">エラー：{error}</p>
         </div>
       )}
 
       {/* ルーム作成 */}
-      <section className="mt-6 border rounded-lg p-4 bg-white">
+      <section className="mt-6 card">
         <h2 className="font-semibold">ルーム作成</h2>
         <div className="mt-3 flex gap-2">
           <input
-            className="border rounded px-3 py-2 w-full"
+            className="input"
             placeholder="例）池袋卓 / サークル麻雀"
             value={roomName}
             onChange={(e) => setRoomName(e.target.value)}
           />
-          <button
-            className="bg-blue-600 text-white rounded px-4 py-2 whitespace-nowrap"
-            onClick={createRoom}
-          >
+          <button className="btn btn-primary whitespace-nowrap" onClick={createRoom}>
             作成
           </button>
         </div>
 
-        {/* 作成直後の招待情報 */}
         {lastInvite && (
-          <div className="mt-4 border rounded p-3 bg-gray-50">
+          <div className="mt-4">
             <p className="text-sm font-medium">招待リンク</p>
-            <p className="text-xs text-gray-600 mt-1 break-all">{lastInvite.url}</p>
-            <div className="mt-2 flex gap-2">
-              <button className="border rounded px-3 py-2 text-sm" onClick={() => copy(lastInvite.url)}>
+            <p className="text-xs card-muted mt-1 break-all">{lastInvite.url}</p>
+            <div className="mt-2 flex gap-2 flex-wrap">
+              <button className="btn" onClick={() => copy(lastInvite.url, "URLをコピーしました！")}>
                 URLをコピー
               </button>
-              <button className="border rounded px-3 py-2 text-sm" onClick={() => copy(lastInvite.code)}>
+              <button className="btn" onClick={() => copy(lastInvite.code, "招待コードをコピーしました！")}>
                 招待コードをコピー
               </button>
             </div>
           </div>
         )}
 
-        {/* 招待コードが返ってこない場合のヒント */}
         {!lastInvite && (
-          <p className="text-xs text-gray-600 mt-3">
+          <p className="text-xs card-muted mt-3">
             ※ 招待コードが表示されない場合、DB側で invite_code の自動生成設定が必要です。
           </p>
         )}
       </section>
 
-      {/* ルーム参加（招待コード） */}
-      <section className="mt-4 border rounded-lg p-4 bg-white">
+      {/* ルーム参加 */}
+      <section className="mt-4 card">
         <h2 className="font-semibold">ルームに参加</h2>
-        <p className="text-sm text-gray-600 mt-1">招待コードを入力して参加できます</p>
+        <p className="text-sm card-muted mt-1">招待コードを入力して参加できます</p>
 
         <div className="mt-3 flex gap-2">
           <input
-            className="border rounded px-3 py-2 w-full"
+            className="input"
             placeholder="招待コード（例：a1b2c3d4...）"
             value={inviteCode}
             onChange={(e) => setInviteCode(e.target.value)}
           />
-          <button className="border rounded px-4 py-2 whitespace-nowrap" onClick={goJoin}>
+          <button className="btn whitespace-nowrap" onClick={goJoin}>
             参加
           </button>
         </div>
       </section>
 
       {/* 参加中のルーム */}
-      <section className="mt-6">
+      <section className="mt-6 card">
         <h2 className="font-semibold">参加中のルーム</h2>
 
         {rooms.length === 0 ? (
-          <p className="text-gray-600 text-sm mt-2">まだルームがありません。</p>
+          <p className="text-sm card-muted mt-2">まだルームがありません。</p>
         ) : (
           <ul className="mt-3 space-y-2">
             {rooms.map((r) => (
-              <li key={r.id} className="border rounded-lg p-3 bg-white">
+              <li key={r.id} className="card" style={{ padding: 14 }}>
                 <Link className="font-medium underline" href={`/room/${r.id}`}>
                   {r.name}
                 </Link>
 
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  {r.invite_code ? (
-                    <>
-                      <span className="text-xs text-gray-600">招待コード：</span>
-                      <span className="text-xs font-mono">{r.invite_code}</span>
-                      <button
-                        className="border rounded px-2 py-1 text-xs"
-                        onClick={() => copy(`${location.origin}/join/${r.invite_code}`)}
-                      >
-                        招待URLコピー
-                      </button>
-                    </>
-                  ) : (
-                    <span className="text-xs text-gray-600">（招待コード未設定）</span>
-                  )}
-                </div>
+                {r.invite_code ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className="text-xs card-muted">招待コード：</span>
+                    <span className="text-xs font-mono">{r.invite_code}</span>
+                    <button
+                      className="btn"
+                      onClick={() =>
+                        copy(`${location.origin}/join/${r.invite_code}`, "招待URLをコピーしました！")
+                      }
+                    >
+                      招待URLコピー
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-xs card-muted mt-2">（招待コード未設定）</p>
+                )}
               </li>
             ))}
           </ul>
