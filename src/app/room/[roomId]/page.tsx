@@ -318,7 +318,6 @@ export default function RoomPage() {
           </button>
 
           <p className="text-xs text-gray-500">
-            タイトルは入力不要。追加した日時がそのまま“タイトル”として表示されます。
           </p>
         </div>
       </section>

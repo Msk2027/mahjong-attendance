@@ -77,7 +77,7 @@ export default function Home() {
   useEffect(() => {
     load();
 
-    // ✅ ログイン/ログアウトに反応して画面を更新（本番で安定する）
+    // ✅ ログイン/ログアウトに反応して画面を更新
     const { data } = supabase.auth.onAuthStateChange(() => {
       load();
     });
@@ -146,7 +146,7 @@ export default function Home() {
     <main className="p-6 max-w-2xl mx-auto">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Mahjong Attendance</h1>
+          <h1 className="text-2xl font-bold">麻雀出欠ボード</h1>
           <p className="text-sm text-gray-600 mt-1">
             ログイン中：{displayName ?? "未設定"}（{email ?? "unknown"}）
           </p>
