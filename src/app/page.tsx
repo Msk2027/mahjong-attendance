@@ -22,38 +22,37 @@ export default function Home() {
   const [roomName, setRoomName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const APP_NAME = "麻雀出欠ボード";
-
   const load = async () => {
     setError(null);
     setLoading(true);
 
     try {
-      const { data: sessData, error: sessErr } = await supabase.auth.getSession();
-      if (sessErr) throw new Error(sessErr.message);
+      const { data: userData, error: userErr } = await supabase.auth.getUser();
 
-      if (!sessData.session) {
-        router.replace("/login");
+      // ✅ 「セッション無し」はエラー扱いせずログインへ
+      if (userErr?.message?.includes("Auth session missing")) {
+        router.push("/login");
         return;
       }
-
-      const { data: userData, error: userErr } = await supabase.auth.getUser();
       if (userErr) throw new Error(userErr.message);
+
       if (!userData.user) {
-        router.replace("/login");
+        router.push("/login");
         return;
       }
 
       setEmail(userData.user.email ?? null);
 
-      const { data: prof } = await supabase
+      // profiles（無くてもOK）
+      const { data: prof, error: profErr } = await supabase
         .from("profiles")
         .select("display_name")
         .eq("user_id", userData.user.id)
         .single();
 
-      setDisplayName(prof?.display_name ?? null);
+      if (!profErr) setDisplayName(prof?.display_name ?? null);
 
+      // 自分が所属しているルームだけ取得
       const { data, error } = await supabase
         .from("room_members")
         .select("rooms(id,name,created_at)")
@@ -69,12 +68,7 @@ export default function Home() {
 
       setRooms(list);
     } catch (e: any) {
-      const msg = e?.message ?? "Unknown error";
-      if (msg.includes("Auth session missing")) {
-        router.replace("/login");
-        return;
-      }
-      setError(msg);
+      setError(e?.message ?? "Unknown error");
     } finally {
       setLoading(false);
     }
@@ -82,8 +76,15 @@ export default function Home() {
 
   useEffect(() => {
     load();
-    const { data } = supabase.auth.onAuthStateChange(() => load());
-    return () => data.subscription.unsubscribe();
+
+    // ✅ ログイン/ログアウトに反応して画面を更新（本番で安定する）
+    const { data } = supabase.auth.onAuthStateChange(() => {
+      load();
+    });
+
+    return () => {
+      data.subscription.unsubscribe();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -91,16 +92,17 @@ export default function Home() {
     setError(null);
 
     try {
-      const { data: sessData } = await supabase.auth.getSession();
-      if (!sessData.session) {
-        router.replace("/login");
+      const { data: userData, error: userErr } = await supabase.auth.getUser();
+
+      if (userErr?.message?.includes("Auth session missing")) {
+        router.push("/login");
         return;
       }
+      if (userErr) throw new Error(userErr.message);
 
-      const { data: userData } = await supabase.auth.getUser();
       const user = userData.user;
       if (!user) {
-        router.replace("/login");
+        router.push("/login");
         return;
       }
 
@@ -135,73 +137,67 @@ export default function Home() {
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    router.replace("/login");
+    router.push("/login");
   };
 
-  if (loading) return <p className="py-10 text-center text-sm text-gray-600">Loading...</p>;
+  if (loading) return <p className="p-6">Loading...</p>;
 
   return (
-    <main className="space-y-6">
-      {/* Header */}
-      <header className="border bg-white rounded-2xl p-5 shadow-sm">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">{APP_NAME}</h1>
-            <p className="text-sm text-gray-600 mt-1">
-              ログイン中：<span className="font-medium text-gray-900">{displayName ?? "未設定"}</span>
-              <span className="text-gray-500">（{email ?? "unknown"}）</span>
-            </p>
-            <div className="mt-2 flex gap-4 text-sm">
-              <Link className="underline" href="/settings">
-                設定（ユーザー名）
-              </Link>
-            </div>
+    <main className="p-6 max-w-2xl mx-auto">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Mahjong Attendance</h1>
+          <p className="text-sm text-gray-600 mt-1">
+            ログイン中：{displayName ?? "未設定"}（{email ?? "unknown"}）
+          </p>
+          <div className="mt-1">
+            <Link className="underline text-sm" href="/settings">
+              設定（ユーザー名変更）
+            </Link>
           </div>
-
-          <button className="text-sm border rounded-lg px-3 py-2" onClick={signOut}>
-            ログアウト
-          </button>
         </div>
 
-        {error && (
-          <div className="mt-4 border rounded-xl p-3 text-sm text-red-700 bg-red-50">
-            エラー：{error}
-          </div>
-        )}
-      </header>
+        <button className="text-sm text-red-600" onClick={signOut}>
+          ログアウト
+        </button>
+      </div>
 
-      {/* Create Room */}
-      <section className="border bg-white rounded-2xl p-5 shadow-sm">
+      {error && (
+        <div className="mt-4 border rounded p-3 text-sm text-red-700 bg-red-50">
+          エラー：{error}
+        </div>
+      )}
+
+      <section className="mt-6 border rounded-lg p-4">
         <h2 className="font-semibold">ルーム作成</h2>
-        <p className="text-sm text-gray-600 mt-1">例：池袋卓 / サークル麻雀 / 研究室卓</p>
-
         <div className="mt-3 flex gap-2">
           <input
-            className="border rounded-xl px-3 py-2 w-full"
-            placeholder="ルーム名"
+            className="border rounded px-3 py-2 w-full"
+            placeholder="例）池袋卓 / サークル麻雀"
             value={roomName}
             onChange={(e) => setRoomName(e.target.value)}
           />
-          <button className="border rounded-xl px-4 py-2 whitespace-nowrap" onClick={createRoom}>
+          <button
+            className="bg-blue-600 text-white rounded px-4 py-2 whitespace-nowrap"
+            onClick={createRoom}
+          >
             作成
           </button>
         </div>
       </section>
 
-      {/* Rooms */}
-      <section className="border bg-white rounded-2xl p-5 shadow-sm">
+      <section className="mt-6">
         <h2 className="font-semibold">参加中のルーム</h2>
-
         {rooms.length === 0 ? (
-          <p className="text-sm text-gray-600 mt-2">まだルームがありません。</p>
+          <p className="text-gray-600 text-sm mt-2">まだルームがありません。</p>
         ) : (
           <ul className="mt-3 space-y-2">
             {rooms.map((r) => (
-              <li key={r.id} className="border rounded-xl p-4">
+              <li key={r.id} className="border rounded-lg p-3">
                 <Link className="font-medium underline" href={`/room/${r.id}`}>
                   {r.name}
                 </Link>
-                <div className="text-xs text-gray-500 mt-1">ID: {r.id}</div>
+                <div className="text-xs text-gray-600 mt-1">{r.id}</div>
               </li>
             ))}
           </ul>
