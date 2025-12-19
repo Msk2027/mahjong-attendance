@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 /* 麻雀っぽいグリーン背景 + 文字色 */
 html,
@@ -9,11 +7,16 @@ body {
 }
 
 body {
-  background: radial-gradient(1200px 800px at 20% 10%, #0b3b2a 0%, #062016 55%, #04160f 100%);
+  background: radial-gradient(
+    1200px 800px at 20% 10%,
+    #0b3b2a 0%,
+    #062016 55%,
+    #04160f 100%
+  );
   color: #ecfdf5; /* emerald-50 */
 }
 
-/* ちょいカッコよく見える共通カード */
+/* 共通カード（Tailwind classと併用OK） */
 .card {
   border: 1px solid rgba(16, 185, 129, 0.25); /* emerald-500 */
   background: rgba(6, 78, 59, 0.35); /* emerald-900 */
