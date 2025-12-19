@@ -28,6 +28,12 @@ export default function Home() {
 
     try {
       const { data: userData, error: userErr } = await supabase.auth.getUser();
+
+      // ✅ 「セッション無し」はエラー扱いせずログインへ
+      if (userErr?.message?.includes("Auth session missing")) {
+        router.push("/login");
+        return;
+      }
       if (userErr) throw new Error(userErr.message);
 
       if (!userData.user) {
@@ -70,6 +76,15 @@ export default function Home() {
 
   useEffect(() => {
     load();
+
+    // ✅ ログイン/ログアウトに反応して画面を更新（本番で安定する）
+    const { data } = supabase.auth.onAuthStateChange(() => {
+      load();
+    });
+
+    return () => {
+      data.subscription.unsubscribe();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -77,7 +92,14 @@ export default function Home() {
     setError(null);
 
     try {
-      const { data: userData } = await supabase.auth.getUser();
+      const { data: userData, error: userErr } = await supabase.auth.getUser();
+
+      if (userErr?.message?.includes("Auth session missing")) {
+        router.push("/login");
+        return;
+      }
+      if (userErr) throw new Error(userErr.message);
+
       const user = userData.user;
       if (!user) {
         router.push("/login");
@@ -115,7 +137,7 @@ export default function Home() {
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    location.href = "/login";
+    router.push("/login");
   };
 
   if (loading) return <p className="p-6">Loading...</p>;
