@@ -44,6 +44,7 @@ type Guest = {
   note: string | null;
   added_by: string | null;
   created_at: string;
+  display_name?: string | null;
 };
 
 const statusLabel: Record<Rsvp["status"], string> = {
@@ -169,10 +170,10 @@ export default function RoomPage() {
       }));
       setRsvps(rsvpList);
 
-      // ゲスト
+      // ゲスト（display_name があるDBなので一緒に取得しておく）
       const { data: guestData, error: guestErr } = await supabase
         .from("room_guests")
-        .select("id,room_id,name,note,added_by,created_at")
+        .select("id,room_id,name,display_name,note,added_by,created_at")
         .eq("room_id", roomId)
         .order("created_at", { ascending: true });
 
@@ -182,6 +183,7 @@ export default function RoomPage() {
         id: g.id,
         room_id: g.room_id,
         name: g.name,
+        display_name: g.display_name ?? null,
         note: g.note ?? null,
         added_by: g.added_by ?? null,
         created_at: g.created_at,
@@ -262,11 +264,13 @@ export default function RoomPage() {
       if (name.length > 40) throw new Error("ゲスト名が長すぎます（40文字以内）");
       if (note.length > 60) throw new Error("メモが長すぎます（60文字以内）");
 
+      // ✅ display_name が NOT NULL なので必ず入れる
       const { error } = await supabase.from("room_guests").insert({
         room_id: roomId,
         name,
+        display_name: name, // ← これが今回の修正ポイント
         note: note ? note : null,
-        added_by: me.id, // ✅ added_by を正として統一
+        added_by: me.id,
       });
 
       if (error) throw new Error(error.message);
@@ -480,7 +484,7 @@ export default function RoomPage() {
         )}
       </section>
 
-      {/* ゲスト（メンバーの下に置くのが自然） */}
+      {/* ゲスト（メンバーの下に配置） */}
       <section className="mt-4 card">
         <h2 className="font-semibold">ゲスト参加者</h2>
         <p className="text-sm card-muted mt-1">臨時で呼ぶ人がいる場合に追加して共有できます。</p>
