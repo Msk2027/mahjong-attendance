@@ -75,3 +75,17 @@ body {
   font-size: 12px;
   color: rgba(236, 253, 245, 0.9);
 }
+
+/* ✅ Tailwindの bg-white を麻雀グリーンに上書き（白い箱を根絶） */
+.bg-white {
+  background-color: rgba(6, 78, 59, 0.35) !important; /* emerald-900/35 */
+  border-color: rgba(16, 185, 129, 0.25) !important;  /* emerald-500/25 */
+  color: #ecfdf5 !important; /* emerald-50 */
+}
+
+/* ✅ 文字色も暗背景向けに補正（読みやすく） */
+.text-gray-600,
+.text-gray-700,
+.text-gray-500 {
+  color: rgba(236, 253, 245, 0.75) !important;
+}
