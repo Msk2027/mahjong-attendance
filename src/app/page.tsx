@@ -45,13 +45,13 @@ export default function Home() {
       setEmail(userData.user.email ?? null);
 
       // profiles（無くてもOK）
-      const { data: prof, error: profErr } = await supabase
+      const { data: prof } = await supabase
         .from("profiles")
         .select("display_name")
         .eq("user_id", userData.user.id)
         .single();
 
-      if (!profErr) setDisplayName(prof?.display_name ?? null);
+      setDisplayName(prof?.display_name ?? null);
 
       // 自分が所属しているルームだけ取得
       const { data, error } = await supabase
@@ -74,28 +74,6 @@ export default function Home() {
       setLoading(false);
     }
   };
-  const goJoin = () => {
-  const code = inviteCode.trim();
-  if (!code) return;
-  router.push(`/join/${code}`);
-};
-
-<section className="border bg-white rounded-2xl p-5 shadow-sm">
-  <h2 className="font-semibold">ルームに参加</h2>
-  <p className="text-sm text-gray-600 mt-1">招待コードを入力して参加できます</p>
-
-  <div className="mt-3 flex gap-2">
-    <input
-      className="border rounded-xl px-3 py-2 w-full"
-      placeholder="招待コード（例：a1b2c3d4...）"
-      value={inviteCode}
-      onChange={(e) => setInviteCode(e.target.value)}
-    />
-    <button className="border rounded-xl px-4 py-2 whitespace-nowrap" onClick={goJoin}>
-      参加
-    </button>
-  </div>
-</section>
 
   useEffect(() => {
     load();
@@ -158,6 +136,12 @@ export default function Home() {
     }
   };
 
+  const goJoin = () => {
+    const code = inviteCode.trim();
+    if (!code) return;
+    router.push(`/join/${code}`);
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
     router.push("/login");
@@ -191,7 +175,8 @@ export default function Home() {
         </div>
       )}
 
-      <section className="mt-6 border rounded-lg p-4">
+      {/* ルーム作成 */}
+      <section className="mt-6 border rounded-lg p-4 bg-white">
         <h2 className="font-semibold">ルーム作成</h2>
         <div className="mt-3 flex gap-2">
           <input
@@ -209,6 +194,25 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ルーム参加（招待コード） */}
+      <section className="mt-4 border rounded-lg p-4 bg-white">
+        <h2 className="font-semibold">ルームに参加</h2>
+        <p className="text-sm text-gray-600 mt-1">招待コードを入力して参加できます</p>
+
+        <div className="mt-3 flex gap-2">
+          <input
+            className="border rounded px-3 py-2 w-full"
+            placeholder="招待コード（例：a1b2c3d4...）"
+            value={inviteCode}
+            onChange={(e) => setInviteCode(e.target.value)}
+          />
+          <button className="border rounded px-4 py-2 whitespace-nowrap" onClick={goJoin}>
+            参加
+          </button>
+        </div>
+      </section>
+
+      {/* 参加中のルーム */}
       <section className="mt-6">
         <h2 className="font-semibold">参加中のルーム</h2>
         {rooms.length === 0 ? (
@@ -216,7 +220,7 @@ export default function Home() {
         ) : (
           <ul className="mt-3 space-y-2">
             {rooms.map((r) => (
-              <li key={r.id} className="border rounded-lg p-3">
+              <li key={r.id} className="border rounded-lg p-3 bg-white">
                 <Link className="font-medium underline" href={`/room/${r.id}`}>
                   {r.name}
                 </Link>
