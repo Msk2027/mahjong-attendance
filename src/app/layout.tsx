@@ -1,9 +1,20 @@
 import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
 
 export const metadata: Metadata = {
   title: "麻雀出欠ボード",
-  description: "麻雀の出欠と開催可否をサクッと管理するWebアプリ",
+  description: "麻雀の出欠を管理するWebアプリ",
 };
 
 export default function RootLayout({
@@ -13,8 +24,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ja">
-      <body className="min-h-screen bg-gray-50 text-gray-900">
-        <div className="max-w-4xl mx-auto px-4 py-6">{children}</div>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-dvh`}>
+        {children}
       </body>
     </html>
   );

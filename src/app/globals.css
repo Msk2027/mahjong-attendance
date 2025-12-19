@@ -1,26 +1,74 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* 麻雀っぽいグリーン背景 + 文字色 */
 html,
 body {
   height: 100%;
 }
 
 body {
-  margin: 0;
-  background: var(--background);
-  color: var(--foreground);
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  background: radial-gradient(1200px 800px at 20% 10%, #0b3b2a 0%, #062016 55%, #04160f 100%);
+  color: #ecfdf5; /* emerald-50 */
+}
+
+/* ちょいカッコよく見える共通カード */
+.card {
+  border: 1px solid rgba(16, 185, 129, 0.25); /* emerald-500 */
+  background: rgba(6, 78, 59, 0.35); /* emerald-900 */
+  border-radius: 16px;
+  padding: 16px;
+  backdrop-filter: blur(6px);
+}
+
+.card-muted {
+  color: rgba(236, 253, 245, 0.75);
+}
+
+.btn {
+  border: 1px solid rgba(236, 253, 245, 0.25);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.btn:hover {
+  background: rgba(6, 78, 59, 0.25);
+}
+
+.btn-primary {
+  background: rgba(37, 99, 235, 0.9); /* blue-600 */
+  border-color: rgba(37, 99, 235, 0.9);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: rgba(37, 99, 235, 1);
+}
+
+.input {
+  width: 100%;
+  border: 1px solid rgba(236, 253, 245, 0.2);
+  background: rgba(4, 22, 15, 0.35);
+  color: #ecfdf5;
+  border-radius: 12px;
+  padding: 10px 12px;
+  outline: none;
+}
+
+.input::placeholder {
+  color: rgba(236, 253, 245, 0.55);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(236, 253, 245, 0.2);
+  background: rgba(6, 78, 59, 0.25);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: rgba(236, 253, 245, 0.9);
 }
