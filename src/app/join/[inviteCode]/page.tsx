@@ -10,7 +10,7 @@ export default function JoinByCodePage() {
 
   // useParams() は string | string[] | undefined になり得るので安全に処理
   const inviteCode = useMemo(() => {
-    const v = params?.inviteCode;
+    const v = (params as any)?.inviteCode;
     if (typeof v === "string") return v;
     if (Array.isArray(v)) return v[0];
     return "";
@@ -19,26 +19,31 @@ export default function JoinByCodePage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!inviteCode) return; // ここが空だと「引数なし」扱いになって詰むのでガード
+    if (!inviteCode) return; // 空だと「引数なし」扱いになって詰むのでガード
 
     (async () => {
       try {
+        // 未ログインなら /login
         const { data: sess } = await supabase.auth.getSession();
         if (!sess.session) {
           router.replace("/login");
           return;
         }
 
+        // ✅ RLS回避：DB関数で参加処理
         const { data, error } = await supabase.rpc("join_room_by_invite", {
           p_code: inviteCode,
         });
 
         if (error) throw new Error(error.message);
 
-        const row = data?.[0];
-        if (!row?.room_id) throw new Error("招待コードが無効です");
+        // ✅ 返り値は衝突回避のため _room_id / _room_name
+        const row = (data as any)?.[0];
+        const rid: string | undefined = row?._room_id;
 
-        router.replace(`/room/${row.room_id}`);
+        if (!rid) throw new Error("招待コードが無効です");
+
+        router.replace(`/room/${rid}`);
       } catch (e: any) {
         setError(e?.message ?? "Unknown error");
       }
