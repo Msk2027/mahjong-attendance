@@ -24,52 +24,48 @@ export default function Home() {
 
   const load = async () => {
     setError(null);
+    setLoading(true);
 
-    const { data: userData, error: userErr } = await supabase.auth.getUser();
-    if (userErr) {
-      setError(userErr.message);
-      return;
+    try {
+      const { data: userData, error: userErr } = await supabase.auth.getUser();
+      if (userErr) throw new Error(userErr.message);
+
+      if (!userData.user) {
+        router.push("/login");
+        return;
+      }
+
+      setEmail(userData.user.email ?? null);
+
+      // profiles（無くてもOK）
+      const { data: prof, error: profErr } = await supabase
+        .from("profiles")
+        .select("display_name")
+        .eq("user_id", userData.user.id)
+        .single();
+
+      if (!profErr) setDisplayName(prof?.display_name ?? null);
+
+      // 自分が所属しているルームだけ取得
+      const { data, error } = await supabase
+        .from("room_members")
+        .select("rooms(id,name,created_at)")
+        .eq("user_id", userData.user.id);
+
+      if (error) throw new Error(error.message);
+
+      const list: Room[] =
+        (data ?? [])
+          .map((row: any) => row.rooms)
+          .filter(Boolean)
+          .sort((a: Room, b: Room) => (a.created_at < b.created_at ? 1 : -1));
+
+      setRooms(list);
+    } catch (e: any) {
+      setError(e?.message ?? "Unknown error");
+    } finally {
+      setLoading(false);
     }
-    if (!userData.user) {
-      router.push("/login");
-      return;
-    }
-
-    setEmail(userData.user.email ?? null);
-
-    // ✅ profiles からユーザー名を取得
-    const { data: prof, error: profErr } = await supabase
-      .from("profiles")
-      .select("display_name")
-      .eq("user_id", userData.user.id)
-      .single();
-
-    // profilesがまだ無いユーザーでも落ちないようにする
-    if (profErr) {
-      setDisplayName(null);
-    } else {
-      setDisplayName(prof?.display_name ?? null);
-    }
-
-    // 自分が所属しているルームだけ取得
-    const { data, error } = await supabase
-      .from("room_members")
-      .select("rooms(id,name,created_at)")
-      .eq("user_id", userData.user.id);
-
-    if (error) {
-      setError(error.message);
-      return;
-    }
-
-    const list: Room[] =
-      (data ?? [])
-        .map((row: any) => row.rooms)
-        .filter(Boolean)
-        .sort((a: Room, b: Room) => (a.created_at < b.created_at ? 1 : -1));
-
-    setRooms(list);
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -80,48 +76,41 @@ export default function Home() {
   const createRoom = async () => {
     setError(null);
 
-    const { data: userData } = await supabase.auth.getUser();
-    const user = userData.user;
-    if (!user) {
-      router.push("/login");
-      return;
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const user = userData.user;
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+
+      const name = roomName.trim();
+      if (!name) throw new Error("ルーム名を入力してください");
+
+      const { data: room, error: roomErr } = await supabase
+        .from("rooms")
+        .insert({ name, created_by: user.id })
+        .select("id,name,created_at")
+        .single();
+
+      if (roomErr) throw new Error(roomErr.message);
+
+      const dn = displayName ?? (user.email ?? "owner").split("@")[0];
+
+      const { error: memErr } = await supabase.from("room_members").insert({
+        room_id: room.id,
+        user_id: user.id,
+        display_name: dn,
+        role: "owner",
+      });
+
+      if (memErr) throw new Error(memErr.message);
+
+      setRoomName("");
+      await load();
+    } catch (e: any) {
+      setError(e?.message ?? "Unknown error");
     }
-
-    const name = roomName.trim();
-    if (!name) {
-      setError("ルーム名を入力してください");
-      return;
-    }
-
-    // rooms を作成
-    const { data: room, error: roomErr } = await supabase
-      .from("rooms")
-      .insert({ name, created_by: user.id })
-      .select("id,name,created_at")
-      .single();
-
-    if (roomErr) {
-      setError(roomErr.message);
-      return;
-    }
-
-    // ✅ room_members.display_name に profiles のユーザー名を使う（無ければメールの@前）
-    const dn = displayName ?? (user.email ?? "owner").split("@")[0];
-
-    const { error: memErr } = await supabase.from("room_members").insert({
-      room_id: room.id,
-      user_id: user.id,
-      display_name: dn,
-      role: "owner",
-    });
-
-    if (memErr) {
-      setError(memErr.message);
-      return;
-    }
-
-    setRoomName("");
-    await load();
   };
 
   const signOut = async () => {
@@ -136,13 +125,9 @@ export default function Home() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Mahjong Attendance</h1>
-
-          {/* ✅ ユーザー名を表示 */}
           <p className="text-sm text-gray-600 mt-1">
-            ログイン中：{displayName ?? "未設定"}（{email}）
+            ログイン中：{displayName ?? "未設定"}（{email ?? "unknown"}）
           </p>
-
-          {/* ✅ 設定ページへのリンク */}
           <div className="mt-1">
             <Link className="underline text-sm" href="/settings">
               設定（ユーザー名変更）
@@ -154,6 +139,12 @@ export default function Home() {
           ログアウト
         </button>
       </div>
+
+      {error && (
+        <div className="mt-4 border rounded p-3 text-sm text-red-700 bg-red-50">
+          エラー：{error}
+        </div>
+      )}
 
       <section className="mt-6 border rounded-lg p-4">
         <h2 className="font-semibold">ルーム作成</h2>
@@ -171,7 +162,6 @@ export default function Home() {
             作成
           </button>
         </div>
-        {error && <p className="text-red-600 text-sm mt-2">{error}</p>}
       </section>
 
       <section className="mt-6">
