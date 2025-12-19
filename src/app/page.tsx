@@ -20,6 +20,7 @@ export default function Home() {
 
   const [rooms, setRooms] = useState<Room[]>([]);
   const [roomName, setRoomName] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
@@ -73,6 +74,28 @@ export default function Home() {
       setLoading(false);
     }
   };
+  const goJoin = () => {
+  const code = inviteCode.trim();
+  if (!code) return;
+  router.push(`/join/${code}`);
+};
+
+<section className="border bg-white rounded-2xl p-5 shadow-sm">
+  <h2 className="font-semibold">ルームに参加</h2>
+  <p className="text-sm text-gray-600 mt-1">招待コードを入力して参加できます</p>
+
+  <div className="mt-3 flex gap-2">
+    <input
+      className="border rounded-xl px-3 py-2 w-full"
+      placeholder="招待コード（例：a1b2c3d4...）"
+      value={inviteCode}
+      onChange={(e) => setInviteCode(e.target.value)}
+    />
+    <button className="border rounded-xl px-4 py-2 whitespace-nowrap" onClick={goJoin}>
+      参加
+    </button>
+  </div>
+</section>
 
   useEffect(() => {
     load();
