@@ -155,7 +155,7 @@ export default function LoginPage() {
               className="border rounded px-3 py-2 w-full mt-1"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="例）きゃらまき"
+              placeholder="例）やないけ"
             />
           </>
         )}
