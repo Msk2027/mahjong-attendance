@@ -201,7 +201,7 @@ export default function Home() {
 
       {/* ルーム作成 */}
       <section className="mt-6 border rounded-lg p-4 bg-white">
-        <h2 className="font-semibold">ルーム作成</h2>
+        <h2 className="font-semibold">ルームを作成</h2>
         <div className="mt-3 flex gap-2">
           <input
             className="border rounded px-3 py-2 w-full"
