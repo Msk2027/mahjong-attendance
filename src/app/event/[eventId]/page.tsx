@@ -17,25 +17,39 @@ type EventRow = {
   created_at: string;
 };
 
-type Participant = {
-  id?: string;
-  event_id: string;
-  user_id: string | null;
+type Member = {
+  user_id: string;
   display_name: string;
-  kind: string | null; // 'member' or 'guest' (ある想定)
-  guest_name?: string | null;
-  name?: string | null;
+  role: string;
 };
 
-const formatJst = (iso: string) => {
-  // ISO -> "YYYY/MM/DD HH:MM"
+type Rsvp = {
+  candidate_id: string;
+  user_id: string;
+  status: "yes" | "maybe" | "no";
+};
+
+type Guest = {
+  id: string;
+  room_id: string;
+  candidate_id: string | null;
+  name: string;
+  note: string | null;
+};
+
+type ParticipantView = {
+  key: string;
+  kind: "member" | "guest";
+  display_name: string;
+  note?: string | null;
+  isMe?: boolean;
+};
+
+const formatJstHM = (iso: string) => {
   const d = new Date(iso);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${y}/${m}/${day} ${hh}:${mm}`;
+  return `${hh}:${mm}`;
 };
 
 export default function EventPage() {
@@ -53,7 +67,7 @@ export default function EventPage() {
   const [meId, setMeId] = useState<string | null>(null);
 
   const [event, setEvent] = useState<EventRow | null>(null);
-  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [participants, setParticipants] = useState<ParticipantView[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // 開始時刻編集用（HH:MM）
@@ -74,7 +88,8 @@ export default function EventPage() {
       }
 
       const { data: userData } = await supabase.auth.getUser();
-      setMeId(userData.user?.id ?? null);
+      const uid = userData.user?.id ?? null;
+      setMeId(uid);
 
       // event取得
       const { data: ev, error: evErr } = await supabase
@@ -85,44 +100,82 @@ export default function EventPage() {
 
       if (evErr) throw new Error(evErr.message);
 
-      setEvent(ev as EventRow);
+      const evRow = ev as EventRow;
+      setEvent(evRow);
 
       // 初期値
-      const starts = new Date((ev as any).starts_at);
-      const hh = String(starts.getHours()).padStart(2, "0");
-      const mm = String(starts.getMinutes()).padStart(2, "0");
-      setTime(`${hh}:${mm}`);
-      setNote((ev as any).note ?? "");
+      setTime(formatJstHM(evRow.starts_at));
+      setNote(evRow.note ?? "");
 
-      // participants（列が多少違っても落ちないように最低限で取る）
-      const { data: ps, error: pErr } = await supabase
-        .from("event_participants")
-        .select("*")
-        .eq("event_id", eventId);
+      // ✅ ここから「参加者」を live で合成する
+      // 1) room_members
+      const { data: memData, error: memErr } = await supabase
+        .from("room_members")
+        .select("user_id,display_name,role")
+        .eq("room_id", evRow.room_id);
 
-      if (pErr) throw new Error(pErr.message);
+      if (memErr) throw new Error(memErr.message);
 
-      const list: Participant[] = (ps ?? []).map((p: any) => ({
-        id: p.id,
-        event_id: p.event_id,
-        user_id: p.user_id ?? null,
-        display_name: p.display_name ?? p.name ?? p.guest_name ?? "unknown",
-        kind: p.kind ?? null,
-        guest_name: p.guest_name ?? null,
-        name: p.name ?? null,
+      const members: Member[] = (memData ?? []).map((m: any) => ({
+        user_id: m.user_id,
+        display_name: m.display_name,
+        role: m.role,
       }));
 
-      // kindがあれば member→guest順、なければそのまま
-      list.sort((a, b) => {
-        const ak = a.kind ?? "";
-        const bk = b.kind ?? "";
-        if (ak === bk) return a.display_name.localeCompare(b.display_name);
-        if (ak === "member") return -1;
-        if (bk === "member") return 1;
-        return ak.localeCompare(bk);
-      });
+      // 2) rsvps（この candidate の ◯ だけ）
+      const { data: rsvpData, error: rsvpErr } = await supabase
+        .from("rsvps")
+        .select("candidate_id,user_id,status")
+        .eq("room_id", evRow.room_id)
+        .eq("candidate_id", evRow.candidate_id);
 
-      setParticipants(list);
+      if (rsvpErr) throw new Error(rsvpErr.message);
+
+      const rsvps: Rsvp[] = (rsvpData ?? []).map((r: any) => ({
+        candidate_id: r.candidate_id,
+        user_id: r.user_id,
+        status: r.status,
+      }));
+
+      const yesUserIds = new Set(rsvps.filter((r) => r.status === "yes").map((r) => r.user_id));
+
+      // 3) guests（この candidate に紐づくもの）
+      const { data: guestData, error: guestErr } = await supabase
+        .from("room_guests")
+        .select("id,room_id,candidate_id,name,note")
+        .eq("room_id", evRow.room_id)
+        .eq("candidate_id", evRow.candidate_id);
+
+      if (guestErr) throw new Error(guestErr.message);
+
+      const guests: Guest[] = (guestData ?? []).map((g: any) => ({
+        id: g.id,
+        room_id: g.room_id,
+        candidate_id: g.candidate_id ?? null,
+        name: g.name,
+        note: g.note ?? null,
+      }));
+
+      const memberParticipants: ParticipantView[] = members
+        .filter((m) => yesUserIds.has(m.user_id))
+        .map((m) => ({
+          key: `m-${m.user_id}`,
+          kind: "member" as const,
+          display_name: m.display_name,
+          isMe: uid ? m.user_id === uid : false,
+        }))
+        .sort((a, b) => a.display_name.localeCompare(b.display_name));
+
+      const guestParticipants: ParticipantView[] = guests
+        .map((g) => ({
+          key: `g-${g.id}`,
+          kind: "guest" as const,
+          display_name: g.name,
+          note: g.note,
+        }))
+        .sort((a, b) => a.display_name.localeCompare(b.display_name));
+
+      setParticipants([...memberParticipants, ...guestParticipants]);
     } catch (e: any) {
       setError(e?.message ?? "Unknown error");
     } finally {
@@ -159,17 +212,16 @@ export default function EventPage() {
 
   const shareText = useMemo(() => {
     if (!event) return "";
-    const when = formatJst(event.starts_at);
     const lines = [
       `【麻雀 開催確定】`,
       `日程：${event.date}`,
-      `開始：${when.slice(-5)}`,
-      `参加：${participants.length}人`,
+      `開始：${formatJstHM(event.starts_at)}`,
+      `参加：${participants.length}人（メンバー◯＋ゲスト）`,
       `URL：${typeof window !== "undefined" ? window.location.href : ""}`,
     ];
     if (event.note) lines.push(`メモ：${event.note}`);
     return lines.join("\n");
-  }, [event, participants.length]);
+  }, [event, participants]);
 
   const copy = async (text: string) => {
     try {
@@ -191,7 +243,10 @@ export default function EventPage() {
       <h1 className="text-2xl font-bold mt-2">開催詳細</h1>
 
       {error && (
-        <div className="mt-4 card" style={{ borderColor: "rgba(239, 68, 68, 0.35)", background: "rgba(127, 29, 29, 0.25)" }}>
+        <div
+          className="mt-4 card"
+          style={{ borderColor: "rgba(239, 68, 68, 0.35)", background: "rgba(127, 29, 29, 0.25)" }}
+        >
           <p className="text-sm">エラー：{error}</p>
         </div>
       )}
@@ -205,7 +260,7 @@ export default function EventPage() {
               <span className="badge">日程：{event.date}</span>
               <span className="badge">最低：{event.min_players}人</span>
               <span className="badge">参加：{participants.length}人</span>
-              <span className="badge">開始：{formatJst(event.starts_at).slice(-5)}</span>
+              <span className="badge">開始：{formatJstHM(event.starts_at)}</span>
             </div>
 
             <div className="mt-4">
@@ -244,18 +299,23 @@ export default function EventPage() {
           </section>
 
           <section className="mt-4 card">
-            <h2 className="font-semibold">参加者</h2>
-            <ul className="mt-3 space-y-2">
-              {participants.map((p, i) => (
-                <li key={p.id ?? `${p.event_id}-${i}`} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {p.kind ? <span className="badge">{p.kind}</span> : null}
-                    <span className="text-sm">{p.display_name}</span>
-                    {p.user_id && p.user_id === meId ? <span className="badge">あなた</span> : null}
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <h2 className="font-semibold">参加者（メンバー◯＋ゲスト）</h2>
+            {participants.length === 0 ? (
+              <p className="text-sm card-muted mt-2">参加者がいません（メンバーが◯にしてるか確認）</p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {participants.map((p) => (
+                  <li key={p.key} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="badge">{p.kind}</span>
+                      <span className="text-sm">{p.display_name}</span>
+                      {p.isMe ? <span className="badge">あなた</span> : null}
+                      {p.kind === "guest" && p.note ? <span className="badge">({p.note})</span> : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
         </>
       )}
