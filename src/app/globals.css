@@ -1,91 +1,156 @@
 @import "tailwindcss";
 
-/* 麻雀っぽいグリーン背景 + 文字色 */
-html,
-body {
+/* ===== Theme ===== */
+:root {
+  /* 麻雀っぽいグリーン背景 */
+  --bg: #0b3d2e;
+  --bg2: #0a2f24;
+
+  /* カード */
+  --card: rgba(255, 255, 255, 0.10);
+  --card-border: rgba(255, 255, 255, 0.16);
+
+  /* 文字 */
+  --text: rgba(255, 255, 255, 0.92);
+  --muted: rgba(255, 255, 255, 0.72);
+
+  /* アクセント */
+  --accent: #34d399; /* emerald */
+  --danger: #ef4444;
+
+  /* 角丸 & 影 */
+  --radius: 16px;
+  --shadow: 0 8px 24px rgba(0,0,0,0.22);
+
+  /* タップしやすい高さ（iPhone基準） */
+  --tap: 44px;
+}
+
+html, body {
   height: 100%;
 }
 
 body {
-  background: radial-gradient(
-    1200px 800px at 20% 10%,
-    #0b3b2a 0%,
-    #062016 55%,
-    #04160f 100%
-  );
-  color: #ecfdf5; /* emerald-50 */
+  margin: 0;
+  color: var(--text);
+  background: radial-gradient(1200px 600px at 20% 0%, rgba(52, 211, 153, 0.18), transparent 60%),
+              radial-gradient(900px 500px at 100% 20%, rgba(59, 130, 246, 0.12), transparent 60%),
+              linear-gradient(180deg, var(--bg), var(--bg2));
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* 共通カード（Tailwind classと併用OK） */
+/* iPhoneのノッチ/ホームバー対策 */
+main {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ===== Utility Components (あなたの既存classに合わせる) ===== */
 .card {
-  border: 1px solid rgba(16, 185, 129, 0.25); /* emerald-500 */
-  background: rgba(6, 78, 59, 0.35); /* emerald-900 */
-  border-radius: 16px;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
   padding: 16px;
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(10px);
 }
 
 .card-muted {
-  color: rgba(236, 253, 245, 0.75);
-}
-
-.btn {
-  border: 1px solid rgba(236, 253, 245, 0.25);
-  border-radius: 12px;
-  padding: 10px 12px;
-  font-size: 14px;
-}
-
-.btn:hover {
-  background: rgba(6, 78, 59, 0.25);
-}
-
-.btn-primary {
-  background: rgba(37, 99, 235, 0.9); /* blue-600 */
-  border-color: rgba(37, 99, 235, 0.9);
-  color: white;
-}
-
-.btn-primary:hover {
-  background: rgba(37, 99, 235, 1);
-}
-
-.input {
-  width: 100%;
-  border: 1px solid rgba(236, 253, 245, 0.2);
-  background: rgba(4, 22, 15, 0.35);
-  color: #ecfdf5;
-  border-radius: 12px;
-  padding: 10px 12px;
-  outline: none;
-}
-
-.input::placeholder {
-  color: rgba(236, 253, 245, 0.55);
+  color: var(--muted);
 }
 
 .badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid rgba(236, 253, 245, 0.2);
-  background: rgba(6, 78, 59, 0.25);
+  padding: 6px 10px;
   border-radius: 999px;
-  padding: 4px 10px;
+  border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(0,0,0,0.18);
+  color: rgba(255,255,255,0.86);
   font-size: 12px;
-  color: rgba(236, 253, 245, 0.9);
+  line-height: 1;
+  white-space: nowrap;
 }
 
-/* ✅ Tailwindの bg-white を麻雀グリーンに上書き（白い箱を根絶） */
-.bg-white {
-  background-color: rgba(6, 78, 59, 0.35) !important; /* emerald-900/35 */
-  border-color: rgba(16, 185, 129, 0.25) !important;  /* emerald-500/25 */
-  color: #ecfdf5 !important; /* emerald-50 */
+.input, input, select, textarea {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(0,0,0,0.22);
+  color: var(--text);
+  outline: none;
 }
 
-/* ✅ 文字色も暗背景向けに補正（読みやすく） */
-.text-gray-600,
-.text-gray-700,
-.text-gray-500 {
-  color: rgba(236, 253, 245, 0.75) !important;
+.input::placeholder, input::placeholder, textarea::placeholder {
+  color: rgba(255,255,255,0.55);
+}
+
+.input:focus, input:focus, select:focus, textarea:focus {
+  border-color: rgba(52, 211, 153, 0.55);
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.18);
+}
+
+/* ボタン（タップしやすさ優先） */
+.btn {
+  min-height: var(--tap);
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(0,0,0,0.22);
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn:hover {
+  background: rgba(0,0,0,0.30);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn-primary {
+  border-color: rgba(52, 211, 153, 0.40);
+  background: rgba(52, 211, 153, 0.18);
+}
+
+.btn-primary:hover {
+  background: rgba(52, 211, 153, 0.24);
+}
+
+/* リンク（背景が暗いので見やすく） */
+a {
+  color: rgba(167, 243, 208, 0.95);
+}
+
+a:hover {
+  color: rgba(52, 211, 153, 1);
+}
+
+/* ===== Mobile polish ===== */
+@media (max-width: 640px) {
+  /* 余白を少し詰める（あなたのp-6対策として上書き） */
+  main.p-6 {
+    padding: 16px !important;
+  }
+
+  /* “横並び”が詰まりやすい所の保険 */
+  .btn {
+    width: 100%;
+  }
+
+  /* カード内のボタン列が縦に落ちても自然に */
+  .card .btn + .btn {
+    margin-top: 8px;
+  }
+
+  /* 長いURL・IDがはみ出ないように */
+  .break-all {
+    word-break: break-all;
+  }
 }
