@@ -652,7 +652,7 @@ export default function RoomPage() {
             <div className="mt-3 space-y-4">
               {/* 今後 */}
               <div>
-                <p className="text-xs card-muted">これから（開催予定）</p>
+                <p className="text-xs card-muted">開催予定</p>
                 {upcomingEvents.length === 0 ? (
                   <p className="text-sm card-muted mt-2">ありません</p>
                 ) : (

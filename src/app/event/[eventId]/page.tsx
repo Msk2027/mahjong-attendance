@@ -177,6 +177,9 @@ export default function EventPage() {
     return members.filter((m) => !joined.has(m.user_id));
   }, [members, memberParticipants]);
 
+  // ✅ 自分の現在状態
+  const myStatus: EventStatus | null = myParticipant?.event_status ?? null;
+
   // ===== actions =====
   const upsertMyStatus = async (next: EventStatus) => {
     setError(null);
@@ -383,16 +386,32 @@ export default function EventPage() {
       {/* 自分 */}
       <section className="mt-6 card">
         <h2 className="font-semibold">あなたの参加</h2>
-        <div className="mt-3 flex items-center gap-2 flex-wrap">
-          <span className="badge">現在：{myParticipant ? statusText(myParticipant.event_status) : "未登録（不参加扱い）"}</span>
 
-          <button className="btn btn-primary" onClick={() => upsertMyStatus("yes")}>
-            参加にする
+        <div className="mt-3 flex items-center gap-2 flex-wrap">
+          <span className="badge">
+            現在：{myStatus ? statusText(myStatus) : "未登録（不参加扱い）"}
+          </span>
+
+          {/* ✅ 選択中だけ強調（btn-primary） */}
+          <button
+            className={`btn ${myStatus === "yes" ? "btn-primary" : ""}`}
+            onClick={() => upsertMyStatus("yes")}
+          >
+            参加
           </button>
-          <button className="btn" onClick={() => upsertMyStatus("no")}>
-            不参加にする
+
+          <button
+            className={`btn ${myStatus === "no" ? "btn-primary" : ""}`}
+            onClick={() => upsertMyStatus("no")}
+          >
+            不参加
           </button>
         </div>
+
+        {/* ✅ さらに分かりやすくする（小さめの補足） */}
+        <p className="text-xs card-muted mt-2">
+          ※ ボタンは「今選ばれている方」だけ濃く表示されます
+        </p>
       </section>
 
       {/* メンバー */}
@@ -405,6 +424,7 @@ export default function EventPage() {
           <ul className="mt-3 space-y-2">
             {memberParticipants.map((p) => {
               const isMe = me?.id && p.user_id === me.id;
+              const rowStatus = p.event_status;
 
               return (
                 <li key={p.id} className="flex items-center justify-between gap-3">
@@ -415,31 +435,49 @@ export default function EventPage() {
                         {p.display_name}
                         {isMe ? "（あなた）" : ""}
                       </span>
-                      <span className="badge">{statusText(p.event_status)}</span>
+                      <span className="badge">{statusText(rowStatus)}</span>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap justify-end">
+                    {/* ✅ 自分の行にも「選択状態が分かる」ボタン */}
                     {isMe ? (
                       <>
-                        <button className="btn btn-primary" onClick={() => upsertMyStatus("yes")}>
+                        <button
+                          className={`btn ${rowStatus === "yes" ? "btn-primary" : ""}`}
+                          onClick={() => upsertMyStatus("yes")}
+                        >
                           参加
                         </button>
-                        <button className="btn" onClick={() => upsertMyStatus("no")}>
+                        <button
+                          className={`btn ${rowStatus === "no" ? "btn-primary" : ""}`}
+                          onClick={() => upsertMyStatus("no")}
+                        >
                           不参加
                         </button>
                       </>
                     ) : null}
 
+                    {/* ownerは他人も操作できる（選択状態が分かるように） */}
                     {isOwner && !isMe && p.user_id ? (
                       <>
-                        <button className="btn btn-primary" onClick={() => ownerSetMemberStatus(p.user_id!, "yes")}>
+                        <button
+                          className={`btn ${rowStatus === "yes" ? "btn-primary" : ""}`}
+                          onClick={() => ownerSetMemberStatus(p.user_id!, "yes")}
+                        >
                           参加
                         </button>
-                        <button className="btn" onClick={() => ownerSetMemberStatus(p.user_id!, "no")}>
+                        <button
+                          className={`btn ${rowStatus === "no" ? "btn-primary" : ""}`}
+                          onClick={() => ownerSetMemberStatus(p.user_id!, "no")}
+                        >
                           不参加
                         </button>
-                        <button className="btn" style={{ borderColor: "rgba(239, 68, 68, 0.45)" }} onClick={() => ownerRemoveMember(p.user_id!)}>
+                        <button
+                          className="btn"
+                          style={{ borderColor: "rgba(239, 68, 68, 0.45)" }}
+                          onClick={() => ownerRemoveMember(p.user_id!)}
+                        >
                           削除
                         </button>
                       </>
