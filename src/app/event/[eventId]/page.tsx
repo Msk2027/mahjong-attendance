@@ -407,11 +407,6 @@ export default function EventPage() {
             不参加
           </button>
         </div>
-
-        {/* ✅ さらに分かりやすくする（小さめの補足） */}
-        <p className="text-xs card-muted mt-2">
-          ※ ボタンは「今選ばれている方」だけ濃く表示されます
-        </p>
       </section>
 
       {/* メンバー */}
