@@ -232,7 +232,7 @@ export default function RoomPage() {
         }))
       );
 
-      // ✅ Step3: confirmed events
+      // confirmed events
       const { data: evData, error: evErr } = await supabase
         .from("events")
         .select("id,room_id,candidate_id,date,min_players,start_time,note,confirmed_at")
@@ -379,9 +379,43 @@ export default function RoomPage() {
       if (error) throw new Error(error.message);
 
       const eventId = data as string;
-
-      // Step4で event 詳細ページ作る（まだ無ければ一旦404でもOK）
       router.push(`/event/${eventId}`);
+    } catch (e: any) {
+      setError(e?.message ?? "Unknown error");
+    }
+  };
+
+  // ✅ ownerのみ：開催候補削除（RPC）
+  const deleteCandidate = async (candidateId: string) => {
+    setError(null);
+    try {
+      if (!isOwner) throw new Error("ownerのみ実行できます");
+      if (!confirm("この日程候補を削除します。よろしいですか？（出欠・ゲストも消えます）")) return;
+
+      const { error } = await supabase.rpc("delete_schedule_candidate", {
+        p_candidate_id: candidateId,
+      });
+      if (error) throw new Error(error.message);
+
+      await loadAll();
+    } catch (e: any) {
+      setError(e?.message ?? "Unknown error");
+    }
+  };
+
+  // ✅ ownerのみ：開催確定削除（＝確定解除 / RPC）
+  const deleteEvent = async (eventId: string) => {
+    setError(null);
+    try {
+      if (!isOwner) throw new Error("ownerのみ実行できます");
+      if (!confirm("この開催確定を取り消します。よろしいですか？（イベント削除）")) return;
+
+      const { error } = await supabase.rpc("delete_event", {
+        p_event_id: eventId,
+      });
+      if (error) throw new Error(error.message);
+
+      await loadAll();
     } catch (e: any) {
       setError(e?.message ?? "Unknown error");
     }
@@ -437,12 +471,7 @@ export default function RoomPage() {
         <div className="mt-3 flex flex-wrap gap-2 items-end">
           <div className="flex-1 min-w-[220px]">
             <label className="text-xs card-muted">日付</label>
-            <input
-              className="input mt-1"
-              type="date"
-              value={newDate}
-              onChange={(e) => setNewDate(e.target.value)}
-            />
+            <input className="input mt-1" type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} />
           </div>
 
           <div className="w-[160px]">
@@ -462,7 +491,7 @@ export default function RoomPage() {
           </button>
         </div>
 
-        {/* 候補一覧（確定済みは下の「開催確定」へ） */}
+        {/* 候補一覧 */}
         {activeCandidates.length === 0 ? (
           <p className="text-sm card-muted mt-3">候補がありません。</p>
         ) : (
@@ -483,7 +512,8 @@ export default function RoomPage() {
                       </div>
 
                       <p className="text-xs card-muted mt-1">
-                        集計：◯ {sum.yes}（メンバー {sum.yesMembers} + ゲスト {sum.guestCount}） / △ {sum.maybe} / × {sum.no}
+                        集計：◯ {sum.yes}（メンバー {sum.yesMembers} + ゲスト {sum.guestCount}） / △ {sum.maybe} / ×{" "}
+                        {sum.no}
                       </p>
                     </div>
 
@@ -516,6 +546,17 @@ export default function RoomPage() {
                           開催確定
                         </button>
                       ) : null}
+
+                      {/* ✅ ownerのみ：候補削除 */}
+                      {isOwner ? (
+                        <button
+                          className="btn"
+                          onClick={() => deleteCandidate(c.id)}
+                          style={{ borderColor: "rgba(239, 68, 68, 0.45)" }}
+                        >
+                          候補削除
+                        </button>
+                      ) : null}
                     </div>
                   </div>
 
@@ -524,8 +565,7 @@ export default function RoomPage() {
                     <p className="text-xs card-muted">出欠（メンバー）</p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {members.map((m) => {
-                        const s =
-                          rsvps.find((r) => r.candidate_id === c.id && r.user_id === m.user_id)?.status ?? null;
+                        const s = rsvps.find((r) => r.candidate_id === c.id && r.user_id === m.user_id)?.status ?? null;
                         return (
                           <span key={m.user_id} className="badge">
                             {m.display_name}：{s ? statusLabel[s as Rsvp["status"]] : "—"}
@@ -534,7 +574,7 @@ export default function RoomPage() {
                       })}
                     </div>
 
-                    {/* ゲスト（この候補日は確定参加） */}
+                    {/* ゲスト */}
                     <div className="mt-3">
                       <p className="text-xs card-muted">ゲスト（この日は確定参加）</p>
                       {gList.length === 0 ? (
@@ -560,9 +600,7 @@ export default function RoomPage() {
         {/* ゲスト追加 */}
         <div className="mt-4 card" style={{ padding: 14 }}>
           <h3 className="font-semibold">ゲスト追加</h3>
-          <p className="text-sm card-muted mt-1">
-            ゲストは「選択した候補日に確定参加」として◯に加算されます。
-          </p>
+          <p className="text-sm card-muted mt-1">ゲストは「選択した候補日に確定参加」として◯に加算されます。</p>
 
           <div className="mt-3 flex flex-wrap gap-2 items-end">
             <div className="min-w-[220px] flex-1">
@@ -583,7 +621,7 @@ export default function RoomPage() {
                 className="input mt-1"
                 value={guestName}
                 onChange={(e) => setGuestName(e.target.value)}
-                placeholder="例）友人A"
+                placeholder="例）やないけ"
               />
             </div>
 
@@ -606,9 +644,7 @@ export default function RoomPage() {
         {/* ===== ② 開催確定（Step3） ===== */}
         <div className="mt-4 card" style={{ padding: 14 }}>
           <h3 className="font-semibold">開催確定</h3>
-          <p className="text-sm card-muted mt-1">
-            「開催確定」を押した日程がここに並びます（詳細ページは次ステップで作る）。
-          </p>
+          <p className="text-sm card-muted mt-1">「開催確定」を押した日程がここに並びます。</p>
 
           {events.length === 0 ? (
             <p className="text-sm card-muted mt-3">まだ開催確定はありません。</p>
@@ -627,15 +663,32 @@ export default function RoomPage() {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="badge">開催確定</span>
                             <span className="font-semibold">{e.date}</span>
-                            {e.start_time ? <span className="badge">開始 {hhmm(e.start_time)}</span> : <span className="badge">開始 未設定</span>}
+                            {e.start_time ? (
+                              <span className="badge">開始 {hhmm(e.start_time)}</span>
+                            ) : (
+                              <span className="badge">開始 未設定</span>
+                            )}
                             <span className="badge">最低 {e.min_players} 人</span>
                           </div>
                           {e.note ? <p className="text-xs card-muted mt-1 break-all">メモ：{e.note}</p> : null}
                         </div>
 
-                        <Link className="btn" href={`/event/${e.id}`}>
-                          詳細
-                        </Link>
+                        <div className="flex items-center gap-2">
+                          <Link className="btn" href={`/event/${e.id}`}>
+                            詳細
+                          </Link>
+
+                          {/* ✅ ownerのみ：確定取り消し */}
+                          {isOwner ? (
+                            <button
+                              className="btn"
+                              onClick={() => deleteEvent(e.id)}
+                              style={{ borderColor: "rgba(239, 68, 68, 0.45)" }}
+                            >
+                              確定取り消し
+                            </button>
+                          ) : null}
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -662,9 +715,22 @@ export default function RoomPage() {
                             {e.note ? <p className="text-xs card-muted mt-1 break-all">メモ：{e.note}</p> : null}
                           </div>
 
-                          <Link className="btn" href={`/event/${e.id}`}>
-                            詳細
-                          </Link>
+                          <div className="flex items-center gap-2">
+                            <Link className="btn" href={`/event/${e.id}`}>
+                              詳細
+                            </Link>
+
+                            {/* ✅ ownerのみ：過去も取り消しOK（必要なら後でOFFにできる） */}
+                            {isOwner ? (
+                              <button
+                                className="btn"
+                                onClick={() => deleteEvent(e.id)}
+                                style={{ borderColor: "rgba(239, 68, 68, 0.45)" }}
+                              >
+                                確定取り消し
+                              </button>
+                            ) : null}
+                          </div>
                         </li>
                       ))}
                     </ul>
