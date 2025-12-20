@@ -47,10 +47,35 @@ type Guest = {
   created_at: string;
 };
 
+type Event = {
+  id: string;
+  room_id: string;
+  candidate_id: string;
+  date: string; // yyyy-mm-dd
+  min_players: number;
+  start_time: string | null; // "HH:MM:SS"
+  note: string | null;
+  confirmed_at: string;
+};
+
 const statusLabel: Record<Rsvp["status"], string> = {
   yes: "◯",
   maybe: "△",
   no: "×",
+};
+
+const ymdToday = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+const hhmm = (t: string | null) => {
+  if (!t) return "";
+  // "HH:MM:SS" -> "HH:MM"
+  return t.slice(0, 5);
 };
 
 export default function RoomPage() {
@@ -73,6 +98,7 @@ export default function RoomPage() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [rsvps, setRsvps] = useState<Rsvp[]>([]);
   const [guests, setGuests] = useState<Guest[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
 
   // candidate追加
   const [newDate, setNewDate] = useState("");
@@ -144,7 +170,7 @@ export default function RoomPage() {
         }))
       );
 
-      // candidates（is_confirmed 포함）
+      // candidates
       const { data: candData, error: candErr } = await supabase
         .from("schedule_candidates")
         .select("id,room_id,date,min_players,created_by,created_at,is_confirmed")
@@ -185,7 +211,7 @@ export default function RoomPage() {
         }))
       );
 
-      // guests（candidate_id含む）
+      // guests
       const { data: guestData, error: guestErr } = await supabase
         .from("room_guests")
         .select("id,room_id,candidate_id,name,note,created_by,added_by,created_at")
@@ -203,6 +229,27 @@ export default function RoomPage() {
           created_by: g.created_by ?? null,
           added_by: g.added_by ?? null,
           created_at: g.created_at,
+        }))
+      );
+
+      // ✅ Step3: confirmed events
+      const { data: evData, error: evErr } = await supabase
+        .from("events")
+        .select("id,room_id,candidate_id,date,min_players,start_time,note,confirmed_at")
+        .eq("room_id", roomId)
+        .order("date", { ascending: true });
+      if (evErr) throw new Error(evErr.message);
+
+      setEvents(
+        (evData ?? []).map((e: any) => ({
+          id: e.id,
+          room_id: e.room_id,
+          candidate_id: e.candidate_id,
+          date: e.date,
+          min_players: e.min_players,
+          start_time: e.start_time ?? null,
+          note: e.note ?? null,
+          confirmed_at: e.confirmed_at,
         }))
       );
     } catch (e: any) {
@@ -239,6 +286,10 @@ export default function RoomPage() {
     if (!me) return null;
     return rsvps.find((r) => r.candidate_id === candidateId && r.user_id === me.id)?.status ?? null;
   };
+
+  const today = useMemo(() => ymdToday(), []);
+  const upcomingEvents = useMemo(() => events.filter((e) => e.date >= today), [events, today]);
+  const pastEvents = useMemo(() => events.filter((e) => e.date < today), [events, today]);
 
   // ===== actions =====
   const addCandidate = async () => {
@@ -318,7 +369,7 @@ export default function RoomPage() {
     }
   };
 
-  // ✅ Step2の本体：開催確定（ownerのみ）
+  // 開催確定（ownerのみ / DB側でもガード済）
   const confirmCandidate = async (candidateId: string) => {
     setError(null);
     try {
@@ -329,7 +380,7 @@ export default function RoomPage() {
 
       const eventId = data as string;
 
-      // 次のStep4で event 詳細ページ作る（いま無いなら404になる）
+      // Step4で event 詳細ページ作る（まだ無ければ一旦404でもOK）
       router.push(`/event/${eventId}`);
     } catch (e: any) {
       setError(e?.message ?? "Unknown error");
@@ -411,11 +462,9 @@ export default function RoomPage() {
           </button>
         </div>
 
-        {/* 候補一覧（確定済みは表示しない＝Step3で別枠にする） */}
+        {/* 候補一覧（確定済みは下の「開催確定」へ） */}
         {activeCandidates.length === 0 ? (
-          <p className="text-sm card-muted mt-3">
-            候補がありません（確定済みは次ステップで「開催確定」に出します）。
-          </p>
+          <p className="text-sm card-muted mt-3">候補がありません。</p>
         ) : (
           <div className="mt-4 space-y-3">
             {activeCandidates.map((c) => {
@@ -429,17 +478,12 @@ export default function RoomPage() {
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-lg font-semibold">{c.date}</span>
-                        {sum.confirmed ? (
-                          <span className="badge">開催ライン到達</span>
-                        ) : (
-                          <span className="badge">調整中</span>
-                        )}
+                        {sum.confirmed ? <span className="badge">開催ライン到達</span> : <span className="badge">調整中</span>}
                         <span className="badge">最低 {c.min_players} 人</span>
                       </div>
 
                       <p className="text-xs card-muted mt-1">
-                        集計：◯ {sum.yes}（メンバー {sum.yesMembers} + ゲスト {sum.guestCount}） / △{" "}
-                        {sum.maybe} / × {sum.no}
+                        集計：◯ {sum.yes}（メンバー {sum.yesMembers} + ゲスト {sum.guestCount}） / △ {sum.maybe} / × {sum.no}
                       </p>
                     </div>
 
@@ -466,7 +510,7 @@ export default function RoomPage() {
                         ×
                       </button>
 
-                      {/* ✅ ownerだけ + 開催ライン到達で「開催確定」 */}
+                      {/* ownerだけ + 開催ライン到達で「開催確定」 */}
                       {isOwner && sum.confirmed ? (
                         <button className="btn btn-primary" onClick={() => confirmCandidate(c.id)}>
                           開催確定
@@ -481,8 +525,7 @@ export default function RoomPage() {
                     <div className="mt-2 flex flex-wrap gap-2">
                       {members.map((m) => {
                         const s =
-                          rsvps.find((r) => r.candidate_id === c.id && r.user_id === m.user_id)?.status ??
-                          null;
+                          rsvps.find((r) => r.candidate_id === c.id && r.user_id === m.user_id)?.status ?? null;
                         return (
                           <span key={m.user_id} className="badge">
                             {m.display_name}：{s ? statusLabel[s as Rsvp["status"]] : "—"}
@@ -524,11 +567,7 @@ export default function RoomPage() {
           <div className="mt-3 flex flex-wrap gap-2 items-end">
             <div className="min-w-[220px] flex-1">
               <label className="text-xs card-muted">参加日</label>
-              <select
-                className="input mt-1"
-                value={guestCandidateId}
-                onChange={(e) => setGuestCandidateId(e.target.value)}
-              >
+              <select className="input mt-1" value={guestCandidateId} onChange={(e) => setGuestCandidateId(e.target.value)}>
                 {activeCandidates.length === 0 ? <option value="">（候補がありません）</option> : null}
                 {activeCandidates.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -563,9 +602,81 @@ export default function RoomPage() {
             </button>
           </div>
         </div>
+
+        {/* ===== ② 開催確定（Step3） ===== */}
+        <div className="mt-4 card" style={{ padding: 14 }}>
+          <h3 className="font-semibold">開催確定</h3>
+          <p className="text-sm card-muted mt-1">
+            「開催確定」を押した日程がここに並びます（詳細ページは次ステップで作る）。
+          </p>
+
+          {events.length === 0 ? (
+            <p className="text-sm card-muted mt-3">まだ開催確定はありません。</p>
+          ) : (
+            <div className="mt-3 space-y-4">
+              {/* 今後 */}
+              <div>
+                <p className="text-xs card-muted">これから（開催予定）</p>
+                {upcomingEvents.length === 0 ? (
+                  <p className="text-sm card-muted mt-2">ありません</p>
+                ) : (
+                  <ul className="mt-2 space-y-2">
+                    {upcomingEvents.map((e) => (
+                      <li key={e.id} className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="badge">開催確定</span>
+                            <span className="font-semibold">{e.date}</span>
+                            {e.start_time ? <span className="badge">開始 {hhmm(e.start_time)}</span> : <span className="badge">開始 未設定</span>}
+                            <span className="badge">最低 {e.min_players} 人</span>
+                          </div>
+                          {e.note ? <p className="text-xs card-muted mt-1 break-all">メモ：{e.note}</p> : null}
+                        </div>
+
+                        <Link className="btn" href={`/event/${e.id}`}>
+                          詳細
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {/* 過去 */}
+              <div>
+                <p className="text-xs card-muted">過去（開催済み）</p>
+                {pastEvents.length === 0 ? (
+                  <p className="text-sm card-muted mt-2">ありません</p>
+                ) : (
+                  <details className="mt-2">
+                    <summary className="text-sm cursor-pointer">表示する（{pastEvents.length}件）</summary>
+                    <ul className="mt-2 space-y-2">
+                      {pastEvents.map((e) => (
+                        <li key={e.id} className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="badge">開催記録</span>
+                              <span className="font-semibold">{e.date}</span>
+                              {e.start_time ? <span className="badge">開始 {hhmm(e.start_time)}</span> : null}
+                            </div>
+                            {e.note ? <p className="text-xs card-muted mt-1 break-all">メモ：{e.note}</p> : null}
+                          </div>
+
+                          <Link className="btn" href={`/event/${e.id}`}>
+                            詳細
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </section>
 
-      {/* ===== ② メンバー ===== */}
+      {/* ===== ③ メンバー ===== */}
       <section className="mt-4 card">
         <h2 className="font-semibold">メンバー一覧</h2>
         {members.length === 0 ? (
@@ -584,7 +695,7 @@ export default function RoomPage() {
         )}
       </section>
 
-      {/* ===== ③ 招待 ===== */}
+      {/* ===== ④ 招待 ===== */}
       <section className="mt-4 card">
         <h2 className="font-semibold">招待</h2>
         <p className="text-sm card-muted mt-1">URLを送るか、招待コードを送れば参加できます。</p>
@@ -597,17 +708,10 @@ export default function RoomPage() {
           <>
             <div className="mt-4">
               <p className="text-xs card-muted">招待URL</p>
-              <p className="text-sm font-mono mt-1 break-all">
-                {`${window.location.origin}/join/${room.invite_code}`}
-              </p>
+              <p className="text-sm font-mono mt-1 break-all">{`${window.location.origin}/join/${room.invite_code}`}</p>
               <button
                 className="btn mt-2"
-                onClick={() =>
-                  copy(
-                    `${window.location.origin}/join/${room.invite_code}`,
-                    "招待URLをコピーしました！"
-                  )
-                }
+                onClick={() => copy(`${window.location.origin}/join/${room.invite_code}`, "招待URLをコピーしました！")}
               >
                 URLコピー
               </button>
