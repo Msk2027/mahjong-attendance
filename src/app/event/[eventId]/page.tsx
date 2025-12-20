@@ -27,13 +27,15 @@ type Participant = {
   event_id: string;
   room_id: string;
   kind: "member" | "guest";
-  status: "in" | "out";
   user_id: string | null;
-  guest_name: string | null;
-  guest_note: string | null;
+  display_name: string;
+  status: "in" | "out";
+  created_at: string;
+  updated_at: string;
 };
 
 const hhmm = (t: string | null) => (t ? t.slice(0, 5) : "");
+const statusText = (s: "in" | "out") => (s === "in" ? "参加" : "不参加");
 
 export default function EventPage() {
   const router = useRouter();
@@ -48,17 +50,15 @@ export default function EventPage() {
 
   const [loading, setLoading] = useState(true);
   const [me, setMe] = useState<Me | null>(null);
-
   const [event, setEvent] = useState<EventRow | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // UI: ゲスト追加
+  // guest add
   const [guestName, setGuestName] = useState("");
-  const [guestNote, setGuestNote] = useState("");
 
-  // owner用：未参加メンバーを追加する
+  // owner add member
   const [addMemberUserId, setAddMemberUserId] = useState("");
 
   const myRole = useMemo(() => {
@@ -75,7 +75,7 @@ export default function EventPage() {
     try {
       if (!eventId) return;
 
-      // セッション
+      // session
       const { data: sess } = await supabase.auth.getSession();
       if (!sess.session) {
         router.replace("/login");
@@ -96,16 +96,14 @@ export default function EventPage() {
         .select("id,room_id,date,min_players,start_time,note")
         .eq("id", eventId)
         .single();
-
       if (evErr) throw new Error(evErr.message);
       setEvent(ev as EventRow);
 
-      // members (room_members)
+      // members in room
       const { data: mem, error: memErr } = await supabase
         .from("room_members")
         .select("user_id,display_name,role")
         .eq("room_id", (ev as any).room_id);
-
       if (memErr) throw new Error(memErr.message);
 
       const memList: Member[] = (mem ?? []).map((m: any) => ({
@@ -118,33 +116,31 @@ export default function EventPage() {
       // participants
       const { data: ps, error: psErr } = await supabase
         .from("event_participants")
-        .select("id,event_id,room_id,kind,status,user_id,guest_name,guest_note")
+        .select("id,event_id,kind,user_id,display_name,status,created_at,updated_at,room_id")
         .eq("event_id", eventId)
         .order("updated_at", { ascending: true });
 
       if (psErr) throw new Error(psErr.message);
 
-      setParticipants(
-        (ps ?? []).map((p: any) => ({
-          id: p.id,
-          event_id: p.event_id,
-          room_id: p.room_id,
-          kind: p.kind,
-          status: p.status,
-          user_id: p.user_id ?? null,
-          guest_name: p.guest_name ?? null,
-          guest_note: p.guest_note ?? null,
-        }))
-      );
+      const plist: Participant[] = (ps ?? []).map((p: any) => ({
+        id: p.id,
+        event_id: p.event_id,
+        room_id: p.room_id,
+        kind: p.kind,
+        user_id: p.user_id ?? null,
+        display_name: p.display_name,
+        status: p.status,
+        created_at: p.created_at,
+        updated_at: p.updated_at,
+      }));
+      setParticipants(plist);
 
-      // owner用のselect初期値
+      // owner select default
       if (!addMemberUserId) {
-        const inMemberUserIds = new Set(
-          (ps ?? [])
-            .filter((p: any) => p.kind === "member" && p.user_id)
-            .map((p: any) => p.user_id)
+        const joined = new Set(
+          plist.filter((p) => p.kind === "member" && p.user_id).map((p) => p.user_id!) as string[]
         );
-        const notJoined = memList.filter((m) => !inMemberUserIds.has(m.user_id));
+        const notJoined = memList.filter((m) => !joined.has(m.user_id));
         if (notJoined[0]) setAddMemberUserId(notJoined[0].user_id);
       }
     } catch (e: any) {
@@ -159,65 +155,49 @@ export default function EventPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId]);
 
-  // ===== derived =====
-  const memberParticipants = useMemo(
-    () => participants.filter((p) => p.kind === "member"),
-    [participants]
-  );
-
-  const guestParticipants = useMemo(
-    () => participants.filter((p) => p.kind === "guest"),
-    [participants]
-  );
+  // derived
+  const memberParticipants = useMemo(() => participants.filter((p) => p.kind === "member"), [participants]);
+  const guestParticipants = useMemo(() => participants.filter((p) => p.kind === "guest"), [participants]);
 
   const myParticipant = useMemo(() => {
     if (!me) return null;
     return memberParticipants.find((p) => p.user_id === me.id) ?? null;
   }, [me, memberParticipants]);
 
-  const statusText = (s: "in" | "out") => (s === "in" ? "参加" : "不参加");
-
-  const countInMembers = useMemo(
-    () => memberParticipants.filter((p) => p.status === "in").length,
-    [memberParticipants]
-  );
-  const countInGuests = useMemo(
-    () => guestParticipants.filter((p) => p.status === "in").length,
-    [guestParticipants]
-  );
+  const countInMembers = useMemo(() => memberParticipants.filter((p) => p.status === "in").length, [memberParticipants]);
+  const countInGuests = useMemo(() => guestParticipants.filter((p) => p.status === "in").length, [guestParticipants]);
   const countInTotal = countInMembers + countInGuests;
 
-  const memberName = (userId: string | null) =>
-    members.find((m) => m.user_id === userId)?.display_name ?? "unknown";
-
   const notJoinedMembers = useMemo(() => {
-    const inMemberUserIds = new Set(memberParticipants.map((p) => p.user_id).filter(Boolean) as string[]);
-    return members.filter((m) => !inMemberUserIds.has(m.user_id));
+    const joined = new Set(memberParticipants.map((p) => p.user_id).filter(Boolean) as string[]);
+    return members.filter((m) => !joined.has(m.user_id));
   }, [members, memberParticipants]);
 
-  // ===== actions =====
+  const memberDisplayNameById = (userId: string) =>
+    members.find((m) => m.user_id === userId)?.display_name ?? "unknown";
+
+  // actions
   const upsertMyStatus = async (next: "in" | "out") => {
     setError(null);
     try {
       if (!me) throw new Error("ログイン情報が取得できません");
       if (!event) throw new Error("イベントが見つかりません");
 
-      // 参加者行が無い場合は作る（自分は自分だけ操作OK → RLSで守る）
-      const payload = {
-        event_id: eventId,
-        room_id: event.room_id,
-        kind: "member",
-        user_id: me.id,
-        status: next,
-        updated_by: me.id,
-      };
+      const dn = memberDisplayNameById(me.id);
 
-      const { error } = await supabase
-        .from("event_participants")
-        .upsert(payload, { onConflict: "event_id,user_id" });
+      const { error } = await supabase.from("event_participants").upsert(
+        {
+          event_id: eventId,
+          room_id: event.room_id,
+          kind: "member",
+          user_id: me.id,
+          display_name: dn,
+          status: next,
+        },
+        { onConflict: "event_id,user_id" }
+      );
 
       if (error) throw new Error(error.message);
-
       await loadAll();
     } catch (e: any) {
       setError(e?.message ?? "Unknown error");
@@ -229,24 +209,22 @@ export default function EventPage() {
     try {
       if (!isOwner) throw new Error("ownerのみ実行できます");
       if (!event) throw new Error("イベントが見つかりません");
-      if (!me) throw new Error("ログイン情報が取得できません");
 
-      const { error } = await supabase
-        .from("event_participants")
-        .upsert(
-          {
-            event_id: eventId,
-            room_id: event.room_id,
-            kind: "member",
-            user_id: userId,
-            status: next,
-            updated_by: me.id,
-          },
-          { onConflict: "event_id,user_id" }
-        );
+      const dn = memberDisplayNameById(userId);
+
+      const { error } = await supabase.from("event_participants").upsert(
+        {
+          event_id: eventId,
+          room_id: event.room_id,
+          kind: "member",
+          user_id: userId,
+          display_name: dn,
+          status: next,
+        },
+        { onConflict: "event_id,user_id" }
+      );
 
       if (error) throw new Error(error.message);
-
       await loadAll();
     } catch (e: any) {
       setError(e?.message ?? "Unknown error");
@@ -267,7 +245,6 @@ export default function EventPage() {
         .eq("user_id", userId);
 
       if (error) throw new Error(error.message);
-
       await loadAll();
     } catch (e: any) {
       setError(e?.message ?? "Unknown error");
@@ -279,10 +256,11 @@ export default function EventPage() {
     try {
       if (!isOwner) throw new Error("ownerのみ実行できます");
       if (!event) throw new Error("イベントが見つかりません");
-      if (!me) throw new Error("ログイン情報が取得できません");
 
       const uid = addMemberUserId.trim();
       if (!uid) throw new Error("追加するメンバーを選んでください");
+
+      const dn = memberDisplayNameById(uid);
 
       const { error } = await supabase.from("event_participants").upsert(
         {
@@ -290,45 +268,40 @@ export default function EventPage() {
           room_id: event.room_id,
           kind: "member",
           user_id: uid,
+          display_name: dn,
           status: "in",
-          updated_by: me.id,
         },
         { onConflict: "event_id,user_id" }
       );
 
       if (error) throw new Error(error.message);
-
       await loadAll();
     } catch (e: any) {
       setError(e?.message ?? "Unknown error");
     }
   };
 
-  // ゲスト（誰でも追加/削除）
+  // guests: anyone can add/delete (RLSでルームメンバーならOK想定)
   const addGuest = async () => {
     setError(null);
     try {
       if (!event) throw new Error("イベントが見つかりません");
-      if (!me) throw new Error("ログイン情報が取得できません");
 
       const name = guestName.trim();
-      const note = guestNote.trim();
       if (!name) throw new Error("ゲスト名を入力してください");
 
       const { error } = await supabase.from("event_participants").insert({
         event_id: eventId,
         room_id: event.room_id,
         kind: "guest",
+        user_id: null,
+        display_name: name,
         status: "in",
-        guest_name: name,
-        guest_note: note ? note : null,
-        updated_by: me.id,
       });
 
       if (error) throw new Error(error.message);
 
       setGuestName("");
-      setGuestNote("");
       await loadAll();
     } catch (e: any) {
       setError(e?.message ?? "Unknown error");
@@ -349,7 +322,7 @@ export default function EventPage() {
     }
   };
 
-  // イベント情報（時間/メモ）の更新（ownerだけにしたいなら isOwner ガードを付ける）
+  // owner only: edit start_time + note
   const updateEvent = async (patch: Partial<{ start_time: string | null; note: string | null }>) => {
     setError(null);
     try {
@@ -391,7 +364,9 @@ export default function EventPage() {
             <span className="badge">日付：{event.date}</span>
             <span className="badge">開始：{event.start_time ? hhmm(event.start_time) : "未設定"}</span>
             <span className="badge">最低：{event.min_players}人</span>
-            <span className="badge">参加：{countInTotal}人（メンバー{countInMembers}+ゲスト{countInGuests}）</span>
+            <span className="badge">
+              参加：{countInTotal}人（メンバー{countInMembers}+ゲスト{countInGuests}）
+            </span>
             {myRole ? <span className="badge">あなた：{myRole}</span> : null}
           </div>
 
@@ -421,12 +396,10 @@ export default function EventPage() {
         </div>
       )}
 
-      {/* ===== 自分の参加ステータス ===== */}
+      {/* 自分の参加 */}
       <section className="mt-6 card">
         <h2 className="font-semibold">あなたの参加</h2>
-        <p className="text-sm card-muted mt-1">
-          自分のステータスだけ変更できます（ownerは全員の変更もできます）。
-        </p>
+        <p className="text-sm card-muted mt-1">自分のステータスだけ変更できます（ownerは全員の変更もできます）。</p>
 
         <div className="mt-3 flex items-center gap-2 flex-wrap">
           <span className="badge">現在：{myParticipant ? statusText(myParticipant.status) : "未登録（不参加扱い）"}</span>
@@ -440,7 +413,7 @@ export default function EventPage() {
         </div>
       </section>
 
-      {/* ===== メンバー参加者 ===== */}
+      {/* メンバー参加者 */}
       <section className="mt-4 card">
         <h2 className="font-semibold">メンバー（参加者）</h2>
 
@@ -449,7 +422,6 @@ export default function EventPage() {
         ) : (
           <ul className="mt-3 space-y-2">
             {memberParticipants.map((p) => {
-              const name = memberName(p.user_id);
               const isMe = me?.id && p.user_id === me.id;
 
               return (
@@ -457,7 +429,10 @@ export default function EventPage() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="badge">member</span>
-                      <span className="text-sm font-semibold">{name}{isMe ? "（あなた）" : ""}</span>
+                      <span className="text-sm font-semibold">
+                        {p.display_name}
+                        {isMe ? "（あなた）" : ""}
+                      </span>
                       <span className="badge">{statusText(p.status)}</span>
                     </div>
                   </div>
@@ -476,7 +451,7 @@ export default function EventPage() {
                     ) : null}
 
                     {/* ownerは他人も操作 */}
-                    {isOwner && !isMe ? (
+                    {isOwner && !isMe && p.user_id ? (
                       <>
                         <button className="btn btn-primary" onClick={() => ownerSetMemberStatus(p.user_id!, "in")}>
                           参加
@@ -500,7 +475,7 @@ export default function EventPage() {
           </ul>
         )}
 
-        {/* ownerのみ：参加者に「追加」 */}
+        {/* ownerのみ：参加者に追加 */}
         {isOwner ? (
           <div className="mt-4 card" style={{ padding: 14 }}>
             <h3 className="font-semibold">メンバーを追加（owner）</h3>
@@ -512,11 +487,7 @@ export default function EventPage() {
               <div className="mt-3 flex gap-2 flex-wrap items-end">
                 <div className="flex-1 min-w-[220px]">
                   <label className="text-xs card-muted">追加するメンバー</label>
-                  <select
-                    className="input mt-1"
-                    value={addMemberUserId}
-                    onChange={(e) => setAddMemberUserId(e.target.value)}
-                  >
+                  <select className="input mt-1" value={addMemberUserId} onChange={(e) => setAddMemberUserId(e.target.value)}>
                     {notJoinedMembers.map((m) => (
                       <option key={m.user_id} value={m.user_id}>
                         {m.display_name}（{m.role}）
@@ -534,7 +505,7 @@ export default function EventPage() {
         ) : null}
       </section>
 
-      {/* ===== ゲスト ===== */}
+      {/* ゲスト */}
       <section className="mt-4 card">
         <h2 className="font-semibold">ゲスト</h2>
         <p className="text-sm card-muted mt-1">ゲストは誰でも追加・削除できます。</p>
@@ -548,10 +519,9 @@ export default function EventPage() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="badge">guest</span>
-                    <span className="text-sm font-semibold">{g.guest_name ?? "guest"}</span>
+                    <span className="text-sm font-semibold">{g.display_name}</span>
                     <span className="badge">{statusText(g.status)}</span>
                   </div>
-                  {g.guest_note ? <p className="text-xs card-muted mt-1 break-all">メモ：{g.guest_note}</p> : null}
                 </div>
 
                 <button
@@ -580,16 +550,6 @@ export default function EventPage() {
               />
             </div>
 
-            <div className="min-w-[220px] flex-1">
-              <label className="text-xs card-muted">メモ（任意）</label>
-              <input
-                className="input mt-1"
-                value={guestNote}
-                onChange={(e) => setGuestNote(e.target.value)}
-                placeholder="例）19:30合流"
-              />
-            </div>
-
             <button className="btn btn-primary" onClick={addGuest}>
               追加
             </button>
@@ -597,7 +557,7 @@ export default function EventPage() {
         </div>
       </section>
 
-      {/* ===== owner: 開催時間 / メモ編集 ===== */}
+      {/* owner: 開催時間/メモ編集 */}
       <section className="mt-4 card">
         <h2 className="font-semibold">開催情報の共有（owner）</h2>
         <p className="text-sm card-muted mt-1">開始時刻・メモの変更は owner のみ。</p>
