@@ -1,37 +1,112 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+🀄 麻雀出欠ボード（Mahjong Attendance Board）
 
-## Getting Started
+麻雀の開催日程調整・出欠管理をシンプルに行うためのWebアプリです。
+友人同士の麻雀会やサークル活動など、少人数グループでの利用を想定しています。
 
-First, run the development server:
+URL（デモ）：
+👉 ※必要なら後で追記
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+⸻
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+📌 主な特徴
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+✅ ルーム単位での出欠管理
+	•	ルームを作成し、招待コードやURLでメンバーを招待
+	•	メンバーは複数人で参加可能
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+📅 日程候補の追加・出欠調整
+	•	開催候補日を追加
+	•	各メンバーが ◯ / △ / × で出欠を入力
+	•	ゲスト参加者も候補日に紐づけて追加可能
+	•	ゲストは確定参加として自動集計
 
-## Learn More
+🎯 開催確定フロー
+	•	最低参加人数に到達した候補日に対して
+オーナーのみ「開催確定」操作が可能
+	•	開催確定後はイベントとして管理
 
-To learn more about Next.js, take a look at the following resources:
+🧑‍🤝‍🧑 開催詳細ページ
+	•	開催日の参加者一覧（メンバー・ゲスト）
+	•	各参加者が 後から参加 / 不参加を変更可能
+	•	オーナーは他メンバーの参加状態も調整可能
+	•	開始時刻・メモ（集合場所など）の共有
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+👤 ゲスト参加対応　→バグにより削除中
+	•	アカウントを持たないゲストを簡単に追加
+	•	イベント単位で参加者として管理
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+🔐 アカウント設計
+	•	匿名アカウント（体験版）での利用が可能
+	•	後からメールアドレス・パスワードを設定して
+アカウントを引き継ぐことも可能
 
-## Deploy on Vercel
+⸻
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+🛠 技術スタック
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-# mahjong-attendance
+フロントエンド
+	•	Next.js (App Router)
+	•	TypeScript
+	•	CSS（カスタムユーティリティクラス）
+
+バックエンド / BaaS
+	•	Supabase
+	•	Authentication（匿名ログイン対応）
+	•	PostgreSQL
+	•	Row Level Security（RLS）
+	•	RPC（PL/pgSQL 関数）
+
+⸻
+
+🗂 データ設計の概要
+	•	rooms：ルーム情報
+	•	room_members：ルーム所属メンバー
+	•	schedule_candidates：開催候補日
+	•	rsvps：候補日への出欠
+	•	room_guests：候補日ごとのゲスト
+	•	events：開催確定イベント
+	•	event_participants：開催日の参加者スナップショット
+
+※ 開催確定時に 候補日時点の参加者情報をイベントにコピーする設計
+
+⸻
+
+🔒 権限設計（RLS）
+	•	ルームメンバーのみ閲覧・操作可能
+	•	オーナー権限
+	•	開催確定
+	•	他メンバーの参加状態変更
+	•	メンバーの追加 / 削除
+	•	一般メンバー
+	•	自分の出欠変更
+	•	ゲストの追加 / 削除
+
+⸻
+
+💡 工夫した点（アピールポイント）
+	•	匿名ログイン対応による参加ハードルの低減
+	•	「日程候補 → 開催確定 → イベント管理」という
+状態遷移を明確に分離した設計
+	•	RLS + RPC による 安全な権限管理
+	•	スマホ利用を前提としたUI調整
+	•	後から機能拡張（結果入力・成績管理）が可能な構造
+
+⸻
+
+🚀 今後の拡張予定
+	•	麻雀結果（順位・点数）の記録
+	•	個人成績の集計
+	•	開催履歴の可視化
+	•	通知機能（開催確定時など）
+
+⸻
+
+🧑‍💻 開発者
+	•	名前：やまかわ
+	•	GitHub：https://github.com/Msk2027￼
+
+⸻
+
+📄 ライセンス
+
+This project is licensed under the MIT License.
