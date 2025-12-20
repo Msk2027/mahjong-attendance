@@ -4,7 +4,7 @@
 友人同士の麻雀会やサークル活動など、少人数グループでの利用を想定しています。
 
 URL：
-👉 mahjong-attendance.vercel.app
+👉 https://mahjong-attendance.vercel.app
 
 ⸻
 
