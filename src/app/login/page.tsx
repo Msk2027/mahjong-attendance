@@ -193,7 +193,6 @@ export default function LoginPage() {
       <p className="text-xs text-gray-500 mt-3">
         ※ うまく戻れない時は一度 <Link className="underline" href="/login">/login</Link> を再読み込みしてね
       </p>
-      <p className="text-[10px] text-gray-400 mt-1">build: 2026-06-01-fix2</p>
     </main>
   );
 }
