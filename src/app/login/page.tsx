@@ -141,6 +141,9 @@ export default function LoginPage() {
       <div className="mt-4 border rounded p-4">
         <label className="text-sm text-gray-700">メールアドレス</label>
         <input
+          type="email"
+          name="email"
+          autoComplete="email"
           className="border rounded px-3 py-2 w-full mt-1"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -150,6 +153,8 @@ export default function LoginPage() {
         <label className="text-sm text-gray-700 mt-3 block">パスワード</label>
         <input
           type="password"
+          name="password"
+          autoComplete={mode === "login" ? "current-password" : "new-password"}
           className="border rounded px-3 py-2 w-full mt-1"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
@@ -160,6 +165,9 @@ export default function LoginPage() {
           <>
             <label className="text-sm text-gray-700 mt-3 block">ユーザー名</label>
             <input
+              key="signup-display-name"
+              name="display-name"
+              autoComplete="off"
               className="border rounded px-3 py-2 w-full mt-1"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
