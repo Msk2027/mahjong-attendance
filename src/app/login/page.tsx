@@ -20,6 +20,14 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
+  const switchMode = (next: "login" | "signup") => {
+    setMode(next);
+    setError(null);
+    setInfo(null);
+    // ログインに戻したときに新規登録用のユーザー名が残らないようにする
+    if (next === "login") setDisplayName("");
+  };
+
   // すでにログイン済みなら / に戻す
   useEffect(() => {
     (async () => {
@@ -118,21 +126,24 @@ export default function LoginPage() {
       <div className="mt-3 flex gap-2">
         <button
           className={`border rounded px-3 py-2 text-sm ${mode === "login" ? "bg-gray-100" : ""}`}
-          onClick={() => setMode("login")}
+          onClick={() => switchMode("login")}
         >
           ログイン
         </button>
         <button
           className={`border rounded px-3 py-2 text-sm ${mode === "signup" ? "bg-gray-100" : ""}`}
-          onClick={() => setMode("signup")}
+          onClick={() => switchMode("signup")}
         >
           新規登録
         </button>
       </div>
 
-      <div className="mt-4 border rounded p-4">
+      <div key={mode} className="mt-4 border rounded p-4">
         <label className="text-sm text-gray-700">メールアドレス</label>
         <input
+          type="email"
+          name="email"
+          autoComplete="email"
           className="border rounded px-3 py-2 w-full mt-1"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -142,6 +153,8 @@ export default function LoginPage() {
         <label className="text-sm text-gray-700 mt-3 block">パスワード</label>
         <input
           type="password"
+          name="password"
+          autoComplete={mode === "login" ? "current-password" : "new-password"}
           className="border rounded px-3 py-2 w-full mt-1"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
@@ -152,6 +165,9 @@ export default function LoginPage() {
           <>
             <label className="text-sm text-gray-700 mt-3 block">ユーザー名</label>
             <input
+              key="signup-display-name"
+              name="display-name"
+              autoComplete="off"
               className="border rounded px-3 py-2 w-full mt-1"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
