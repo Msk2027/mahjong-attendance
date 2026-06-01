@@ -20,6 +20,14 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
+  const switchMode = (next: "login" | "signup") => {
+    setMode(next);
+    setError(null);
+    setInfo(null);
+    // ログインに戻したときに新規登録用のユーザー名が残らないようにする
+    if (next === "login") setDisplayName("");
+  };
+
   // すでにログイン済みなら / に戻す
   useEffect(() => {
     (async () => {
@@ -118,13 +126,13 @@ export default function LoginPage() {
       <div className="mt-3 flex gap-2">
         <button
           className={`border rounded px-3 py-2 text-sm ${mode === "login" ? "bg-gray-100" : ""}`}
-          onClick={() => setMode("login")}
+          onClick={() => switchMode("login")}
         >
           ログイン
         </button>
         <button
           className={`border rounded px-3 py-2 text-sm ${mode === "signup" ? "bg-gray-100" : ""}`}
-          onClick={() => setMode("signup")}
+          onClick={() => switchMode("signup")}
         >
           新規登録
         </button>
