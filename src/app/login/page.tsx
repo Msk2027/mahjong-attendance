@@ -121,7 +121,7 @@ export default function LoginPage() {
 
   return (
     <main className="p-6 max-w-md mx-auto">
-      <h1 className="text-2xl font-bold">ログイン</h1>
+      <h1 className="text-2xl font-bold">{mode === "login" ? "ログイン" : "新規登録"}</h1>
 
       <div className="mt-3 flex gap-2">
         <button
