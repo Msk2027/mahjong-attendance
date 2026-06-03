@@ -214,7 +214,7 @@ export default function LoginPage() {
         {mode === "login" && (
           <button
             type="button"
-            className="text-sm text-blue-600 underline mt-3 block mx-auto"
+            className="text-sm underline mt-3 block mx-auto"
             onClick={onForgotPassword}
           >
             パスワードを忘れた方はこちら

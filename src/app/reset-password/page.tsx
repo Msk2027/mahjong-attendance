@@ -19,19 +19,35 @@ export default function ResetPasswordPage() {
   const [done, setDone] = useState(false);
 
   useEffect(() => {
-    // メールのリンクから来ると、Supabaseがhash内のトークンを処理して
+    let cancelled = false;
+
+    // メールのリンクから来ると、Supabaseがトークンを処理して
     // PASSWORD_RECOVERY イベント／セッションを発火する
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "PASSWORD_RECOVERY" || session) setReady(true);
+      if (cancelled) return;
+      if (event === "PASSWORD_RECOVERY" || session) {
+        setReady(true);
+        setChecking(false);
+      }
     });
 
+    // URLのトークン処理は非同期なので、少しの間リトライしながらセッションを待つ
     (async () => {
-      const { data } = await supabase.auth.getSession();
-      if (data.session) setReady(true);
-      setChecking(false);
+      for (let i = 0; i < 12; i++) {
+        const { data } = await supabase.auth.getSession();
+        if (cancelled) return;
+        if (data.session) {
+          setReady(true);
+          setChecking(false);
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 300));
+      }
+      if (!cancelled) setChecking(false);
     })();
 
     return () => {
+      cancelled = true;
       sub.subscription.unsubscribe();
     };
   }, []);
@@ -59,58 +75,69 @@ export default function ResetPasswordPage() {
     }
   };
 
-  if (checking) return <p className="p-6">Loading...</p>;
-
   return (
-    <main className="p-6 max-w-md mx-auto">
-      <h1 className="text-2xl font-bold">パスワード再設定</h1>
+    <main className="p-6 max-w-md mx-auto space-y-4">
+      <div className="card">
+        <h1 className="text-2xl font-bold">パスワード再設定</h1>
 
-      <div className="mt-4 border rounded p-4">
-        {!ready ? (
-          <>
-            <p className="text-sm text-gray-700">
-              再設定用のリンクが確認できませんでした。メールに届いた「パスワード再設定」リンクから開き直してください。
-              リンクには有効期限があります。
+        {checking ? (
+          <p className="card-muted text-sm mt-3">確認中…</p>
+        ) : !ready ? (
+          <div className="mt-3 space-y-3">
+            <p className="text-sm">
+              再設定用のリンクが確認できませんでした。
             </p>
-            <Link className="underline text-sm mt-3 block" href="/login">
+            <ul className="text-sm card-muted list-disc pl-5 space-y-1">
+              <li>メールに届いた「パスワード再設定」リンクから開き直してください。</li>
+              <li>リンクには有効期限があります（古い場合はもう一度送信してください）。</li>
+            </ul>
+            <Link className="btn mt-1 inline-flex" href="/login">
               ログイン画面へ戻る
             </Link>
-          </>
+          </div>
         ) : (
-          <>
-            <label className="text-sm text-gray-700">新しいパスワード（8文字以上）</label>
-            <input
-              type="password"
-              autoComplete="new-password"
-              className="border rounded px-3 py-2 w-full mt-1"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="新しいパスワード"
-              disabled={done}
-            />
+          <div className="mt-4 space-y-3">
+            <div>
+              <label className="text-sm">新しいパスワード（8文字以上）</label>
+              <input
+                type="password"
+                autoComplete="new-password"
+                className="input mt-1"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="新しいパスワード"
+                disabled={done}
+              />
+            </div>
 
-            <label className="text-sm text-gray-700 mt-3 block">新しいパスワード（確認）</label>
-            <input
-              type="password"
-              autoComplete="new-password"
-              className="border rounded px-3 py-2 w-full mt-1"
-              value={password2}
-              onChange={(e) => setPassword2(e.target.value)}
-              placeholder="もう一度入力"
-              disabled={done}
-            />
+            <div>
+              <label className="text-sm">新しいパスワード（確認）</label>
+              <input
+                type="password"
+                autoComplete="new-password"
+                className="input mt-1"
+                value={password2}
+                onChange={(e) => setPassword2(e.target.value)}
+                placeholder="もう一度入力"
+                disabled={done}
+              />
+            </div>
 
-            {err && <p className="text-red-600 text-sm mt-3">{err}</p>}
-            {msg && <p className="text-green-700 text-sm mt-3">{msg}</p>}
+            {err && (
+              <div className="card" style={{ borderColor: "rgba(239, 68, 68, 0.35)", background: "rgba(127, 29, 29, 0.25)" }}>
+                <p className="text-sm">エラー：{err}</p>
+              </div>
+            )}
+            {msg && (
+              <div className="card" style={{ borderColor: "rgba(34,197,94,0.35)", background: "rgba(20,83,45,0.25)" }}>
+                <p className="text-sm">{msg}</p>
+              </div>
+            )}
 
-            <button
-              className="bg-blue-600 text-white rounded px-4 py-2 mt-4 w-full disabled:opacity-50"
-              onClick={update}
-              disabled={done}
-            >
+            <button className="btn btn-primary w-full disabled:opacity-50" onClick={update} disabled={done}>
               パスワードを更新する
             </button>
-          </>
+          </div>
         )}
       </div>
     </main>
