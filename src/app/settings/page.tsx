@@ -148,7 +148,7 @@ export default function SettingsPage() {
 
       // パスワード忘れの時用（ログイン中でも使える）
       const { error } = await supabase.auth.resetPasswordForEmail(me.email, {
-        redirectTo: `${location.origin}/login`,
+        redirectTo: `${location.origin}/reset-password`,
       });
       if (error) throw new Error(error.message);
 

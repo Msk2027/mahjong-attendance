@@ -115,6 +115,8 @@ export default function RoomPage() {
   }, [me, members]);
 
   const isOwner = myRole === "owner";
+  // owner または admin は運営操作（日程・開催・ゲスト管理）が可能
+  const canManage = myRole === "owner" || myRole === "admin";
 
   const copy = async (text: string, doneMsg: string) => {
     try {
@@ -389,7 +391,7 @@ export default function RoomPage() {
   const deleteCandidate = async (candidateId: string) => {
     setError(null);
     try {
-      if (!isOwner) throw new Error("ownerのみ実行できます");
+      if (!canManage) throw new Error("owner / admin のみ実行できます");
       if (!confirm("この日程候補を削除します。よろしいですか？（出欠・ゲストも消えます）")) return;
 
       const { error } = await supabase.rpc("delete_schedule_candidate", {
@@ -407,11 +409,82 @@ export default function RoomPage() {
   const deleteEvent = async (eventId: string) => {
     setError(null);
     try {
-      if (!isOwner) throw new Error("ownerのみ実行できます");
+      if (!canManage) throw new Error("owner / admin のみ実行できます");
       if (!confirm("この開催確定を取り消します。よろしいですか？（イベント削除）")) return;
 
       const { error } = await supabase.rpc("delete_event", {
         p_event_id: eventId,
+      });
+      if (error) throw new Error(error.message);
+
+      await loadAll();
+    } catch (e: any) {
+      setError(e?.message ?? "Unknown error");
+    }
+  };
+
+  // ✅ ownerのみ：ルーム削除（RPC / DB側でもガード済）
+  const deleteRoom = async () => {
+    setError(null);
+    try {
+      if (!isOwner) throw new Error("ownerのみ実行できます");
+      if (
+        !confirm(
+          `ルーム「${room?.name ?? ""}」を削除します。よろしいですか？\n（日程・出欠・ゲスト・メンバーなど、このルームの全データが消えます）`
+        )
+      )
+        return;
+
+      const { error } = await supabase.rpc("delete_room", {
+        p_room_id: roomId,
+      });
+      if (error) throw new Error(error.message);
+
+      router.push("/");
+    } catch (e: any) {
+      setError(e?.message ?? "Unknown error");
+    }
+  };
+
+  // ✅ ownerのみ：メンバーのロール変更（admin付与/解除 / DB側でもガード済）
+  const setMemberRole = async (userId: string, nextRole: "admin" | "member") => {
+    setError(null);
+    try {
+      if (!isOwner) throw new Error("ロール変更はownerのみ実行できます");
+
+      const { error } = await supabase.rpc("set_member_role", {
+        p_room_id: roomId,
+        p_user_id: userId,
+        p_role: nextRole,
+      });
+      if (error) throw new Error(error.message);
+
+      await loadAll();
+    } catch (e: any) {
+      setError(e?.message ?? "Unknown error");
+    }
+  };
+
+  // 退会させられるか（owner→admin/member、admin→memberのみ、自分・ownerは不可）
+  const canRemove = (m: Member) => {
+    if (!me) return false;
+    if (m.user_id === me.id) return false;
+    if (m.role === "owner") return false;
+    if (myRole === "owner") return m.role === "admin" || m.role === "member";
+    if (myRole === "admin") return m.role === "member";
+    return false;
+  };
+
+  // メンバーをルームから強制退会（権限はDB側でもガード済）
+  const removeMember = async (m: Member) => {
+    setError(null);
+    try {
+      if (!canRemove(m)) throw new Error("このメンバーを退会させる権限がありません");
+      if (!confirm(`「${m.display_name}」をルームから退会させます。よろしいですか？\n（このルームでの出欠も削除されます）`)) return;
+
+      const { error } = await supabase.rpc("remove_room_member", {
+        p_room_id: roomId,
+        p_user_id: m.user_id,
       });
       if (error) throw new Error(error.message);
 
@@ -437,15 +510,27 @@ export default function RoomPage() {
           </div>
         </div>
 
-        <button
-          className="btn"
-          onClick={async () => {
-            await supabase.auth.signOut();
-            router.replace("/login");
-          }}
-        >
-          ログアウト
-        </button>
+        <div className="flex flex-col gap-2 items-end">
+          <button
+            className="btn"
+            onClick={async () => {
+              await supabase.auth.signOut();
+              router.replace("/login");
+            }}
+          >
+            ログアウト
+          </button>
+
+          {isOwner && (
+            <button
+              className="btn"
+              style={{ borderColor: "rgba(239, 68, 68, 0.5)", color: "rgb(248, 113, 113)" }}
+              onClick={deleteRoom}
+            >
+              ルーム削除
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -540,15 +625,15 @@ export default function RoomPage() {
                         ×
                       </button>
 
-                      {/* ownerだけ + 開催ライン到達で「開催確定」 */}
-                      {isOwner && sum.confirmed ? (
+                      {/* owner/adminだけ + 開催ライン到達で「開催確定」 */}
+                      {canManage && sum.confirmed ? (
                         <button className="btn btn-primary" onClick={() => confirmCandidate(c.id)}>
                           開催確定
                         </button>
                       ) : null}
 
-                      {/* ✅ ownerのみ：候補削除 */}
-                      {isOwner ? (
+                      {/* ✅ owner/adminのみ：候補削除 */}
+                      {canManage ? (
                         <button
                           className="btn"
                           onClick={() => deleteCandidate(c.id)}
@@ -678,8 +763,8 @@ export default function RoomPage() {
                             詳細
                           </Link>
 
-                          {/* ✅ ownerのみ：確定取り消し */}
-                          {isOwner ? (
+                          {/* ✅ owner/adminのみ：確定取り消し */}
+                          {canManage ? (
                             <button
                               className="btn"
                               onClick={() => deleteEvent(e.id)}
@@ -720,8 +805,8 @@ export default function RoomPage() {
                               詳細
                             </Link>
 
-                            {/* ✅ ownerのみ：過去も取り消しOK（必要なら後でOFFにできる） */}
-                            {isOwner ? (
+                            {/* ✅ owner/adminのみ：過去も取り消しOK（必要なら後でOFFにできる） */}
+                            {canManage ? (
                               <button
                                 className="btn"
                                 onClick={() => deleteEvent(e.id)}
@@ -750,10 +835,36 @@ export default function RoomPage() {
         ) : (
           <ul className="mt-3 space-y-2">
             {members.map((m) => (
-              <li key={m.user_id} className="flex items-center justify-between">
+              <li key={m.user_id} className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span className="badge">{m.role}</span>
                   <span className="text-sm">{m.display_name}</span>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  {/* ✅ ownerのみ：member↔admin の切り替え（owner自身・他のownerは対象外） */}
+                  {isOwner && m.role !== "owner" && m.user_id !== me?.id ? (
+                    m.role === "admin" ? (
+                      <button className="btn" onClick={() => setMemberRole(m.user_id, "member")}>
+                        管理者を解除
+                      </button>
+                    ) : (
+                      <button className="btn" onClick={() => setMemberRole(m.user_id, "admin")}>
+                        管理者にする
+                      </button>
+                    )
+                  ) : null}
+
+                  {/* 強制退会（owner→admin/member、admin→memberのみ） */}
+                  {canRemove(m) ? (
+                    <button
+                      className="btn"
+                      style={{ borderColor: "rgba(239, 68, 68, 0.5)", color: "rgb(248, 113, 113)" }}
+                      onClick={() => removeMember(m)}
+                    >
+                      退会させる
+                    </button>
+                  ) : null}
                 </div>
               </li>
             ))}

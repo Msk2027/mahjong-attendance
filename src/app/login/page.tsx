@@ -73,6 +73,28 @@ export default function LoginPage() {
     router.replace("/");
   };
 
+  const onForgotPassword = async () => {
+    setError(null);
+    setInfo(null);
+
+    const e = email.trim();
+    if (!e) {
+      setError("メールアドレスを入力してから「パスワードを忘れた方」を押してください");
+      return;
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(e, {
+      redirectTo: `${location.origin}/reset-password`,
+    });
+
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    setInfo("パスワード再設定メールを送信しました。メールのリンクから再設定してください。");
+  };
+
   const onSignup = async () => {
     setError(null);
     setInfo(null);
@@ -186,6 +208,16 @@ export default function LoginPage() {
         ) : (
           <button className="bg-blue-600 text-white rounded px-4 py-2 mt-4 w-full" onClick={onSignup}>
             新規登録
+          </button>
+        )}
+
+        {mode === "login" && (
+          <button
+            type="button"
+            className="text-sm underline mt-3 block mx-auto"
+            onClick={onForgotPassword}
+          >
+            パスワードを忘れた方はこちら
           </button>
         )}
       </div>
