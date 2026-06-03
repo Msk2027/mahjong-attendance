@@ -162,7 +162,7 @@ export default function SettingsPage() {
 
   return (
     <main className="p-6 max-w-2xl mx-auto space-y-4">
-      <Link className="underline text-sm" href="/">
+      <Link className="btn" href="/">
         ← 戻る
       </Link>
 
