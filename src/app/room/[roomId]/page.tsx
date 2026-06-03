@@ -115,6 +115,8 @@ export default function RoomPage() {
   }, [me, members]);
 
   const isOwner = myRole === "owner";
+  // owner または admin は運営操作（日程・開催・ゲスト管理）が可能
+  const canManage = myRole === "owner" || myRole === "admin";
 
   const copy = async (text: string, doneMsg: string) => {
     try {
@@ -389,7 +391,7 @@ export default function RoomPage() {
   const deleteCandidate = async (candidateId: string) => {
     setError(null);
     try {
-      if (!isOwner) throw new Error("ownerのみ実行できます");
+      if (!canManage) throw new Error("owner / admin のみ実行できます");
       if (!confirm("この日程候補を削除します。よろしいですか？（出欠・ゲストも消えます）")) return;
 
       const { error } = await supabase.rpc("delete_schedule_candidate", {
@@ -407,7 +409,7 @@ export default function RoomPage() {
   const deleteEvent = async (eventId: string) => {
     setError(null);
     try {
-      if (!isOwner) throw new Error("ownerのみ実行できます");
+      if (!canManage) throw new Error("owner / admin のみ実行できます");
       if (!confirm("この開催確定を取り消します。よろしいですか？（イベント削除）")) return;
 
       const { error } = await supabase.rpc("delete_event", {
@@ -439,6 +441,25 @@ export default function RoomPage() {
       if (error) throw new Error(error.message);
 
       router.push("/");
+    } catch (e: any) {
+      setError(e?.message ?? "Unknown error");
+    }
+  };
+
+  // ✅ ownerのみ：メンバーのロール変更（admin付与/解除 / DB側でもガード済）
+  const setMemberRole = async (userId: string, nextRole: "admin" | "member") => {
+    setError(null);
+    try {
+      if (!isOwner) throw new Error("ロール変更はownerのみ実行できます");
+
+      const { error } = await supabase.rpc("set_member_role", {
+        p_room_id: roomId,
+        p_user_id: userId,
+        p_role: nextRole,
+      });
+      if (error) throw new Error(error.message);
+
+      await loadAll();
     } catch (e: any) {
       setError(e?.message ?? "Unknown error");
     }
@@ -575,15 +596,15 @@ export default function RoomPage() {
                         ×
                       </button>
 
-                      {/* ownerだけ + 開催ライン到達で「開催確定」 */}
-                      {isOwner && sum.confirmed ? (
+                      {/* owner/adminだけ + 開催ライン到達で「開催確定」 */}
+                      {canManage && sum.confirmed ? (
                         <button className="btn btn-primary" onClick={() => confirmCandidate(c.id)}>
                           開催確定
                         </button>
                       ) : null}
 
-                      {/* ✅ ownerのみ：候補削除 */}
-                      {isOwner ? (
+                      {/* ✅ owner/adminのみ：候補削除 */}
+                      {canManage ? (
                         <button
                           className="btn"
                           onClick={() => deleteCandidate(c.id)}
@@ -713,8 +734,8 @@ export default function RoomPage() {
                             詳細
                           </Link>
 
-                          {/* ✅ ownerのみ：確定取り消し */}
-                          {isOwner ? (
+                          {/* ✅ owner/adminのみ：確定取り消し */}
+                          {canManage ? (
                             <button
                               className="btn"
                               onClick={() => deleteEvent(e.id)}
@@ -755,8 +776,8 @@ export default function RoomPage() {
                               詳細
                             </Link>
 
-                            {/* ✅ ownerのみ：過去も取り消しOK（必要なら後でOFFにできる） */}
-                            {isOwner ? (
+                            {/* ✅ owner/adminのみ：過去も取り消しOK（必要なら後でOFFにできる） */}
+                            {canManage ? (
                               <button
                                 className="btn"
                                 onClick={() => deleteEvent(e.id)}
@@ -785,11 +806,24 @@ export default function RoomPage() {
         ) : (
           <ul className="mt-3 space-y-2">
             {members.map((m) => (
-              <li key={m.user_id} className="flex items-center justify-between">
+              <li key={m.user_id} className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span className="badge">{m.role}</span>
                   <span className="text-sm">{m.display_name}</span>
                 </div>
+
+                {/* ✅ ownerのみ：member↔admin の切り替え（owner自身・他のownerは対象外） */}
+                {isOwner && m.role !== "owner" && m.user_id !== me?.id ? (
+                  m.role === "admin" ? (
+                    <button className="btn" onClick={() => setMemberRole(m.user_id, "member")}>
+                      管理者を解除
+                    </button>
+                  ) : (
+                    <button className="btn" onClick={() => setMemberRole(m.user_id, "admin")}>
+                      管理者にする
+                    </button>
+                  )
+                ) : null}
               </li>
             ))}
           </ul>
