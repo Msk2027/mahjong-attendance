@@ -10,6 +10,7 @@ type Room = {
   name: string;
   created_at: string;
   invite_code?: string | null;
+  role: string; // owner / member
 };
 
 export default function Home() {
@@ -58,14 +59,14 @@ export default function Home() {
 
       const { data, error } = await supabase
         .from("room_members")
-        .select("rooms(id,name,created_at,invite_code)")
+        .select("role, rooms(id,name,created_at,invite_code)")
         .eq("user_id", userData.user.id);
 
       if (error) throw new Error(error.message);
 
       const list: Room[] =
         (data ?? [])
-          .map((row: any) => row.rooms)
+          .map((row: any) => (row.rooms ? { ...row.rooms, role: row.role } : null))
           .filter(Boolean)
           .sort((a: Room, b: Room) => (a.created_at < b.created_at ? 1 : -1));
 
@@ -156,6 +157,33 @@ export default function Home() {
     }
   };
 
+  // ✅ ownerのみ：ルーム削除（RPC / DB側でもガード済）
+  const deleteRoom = async (room: Room) => {
+    setError(null);
+
+    if (room.role !== "owner") {
+      setError("ルームの削除はオーナーのみ実行できます");
+      return;
+    }
+    if (
+      !confirm(
+        `ルーム「${room.name}」を削除します。よろしいですか？\n（日程・出欠・ゲスト・メンバーなど、このルームの全データが消えます）`
+      )
+    )
+      return;
+
+    try {
+      const { error } = await supabase.rpc("delete_room", {
+        p_room_id: room.id,
+      });
+      if (error) throw new Error(error.message);
+
+      await load();
+    } catch (e: any) {
+      setError(e?.message ?? "Unknown error");
+    }
+  };
+
   const goJoin = () => {
     const code = inviteCode.trim();
     if (!code) return;
@@ -209,11 +237,24 @@ export default function Home() {
           <ul className="mt-3 space-y-2">
             {rooms.map((r) => (
               <li key={r.id} className="card" style={{ padding: 14 }}>
-                <Link className="font-semibold underline" href={`/room/${r.id}`}>
-                  {r.name}
-                </Link>
+                <div className="flex items-start justify-between gap-2">
+                  <Link className="font-semibold underline" href={`/room/${r.id}`}>
+                    {r.name}
+                  </Link>
+
+                  {r.role === "owner" && (
+                    <button
+                      className="btn"
+                      style={{ borderColor: "rgba(239, 68, 68, 0.5)", color: "rgb(248, 113, 113)" }}
+                      onClick={() => deleteRoom(r)}
+                    >
+                      削除
+                    </button>
+                  )}
+                </div>
 
                 <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {r.role === "owner" && <span className="badge">オーナー</span>}
                   {r.invite_code ? (
                     <>
                       <span className="badge">招待コード：{r.invite_code}</span>
