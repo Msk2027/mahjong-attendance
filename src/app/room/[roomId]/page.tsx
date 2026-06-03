@@ -421,6 +421,29 @@ export default function RoomPage() {
     }
   };
 
+  // ✅ ownerのみ：ルーム削除（RPC / DB側でもガード済）
+  const deleteRoom = async () => {
+    setError(null);
+    try {
+      if (!isOwner) throw new Error("ownerのみ実行できます");
+      if (
+        !confirm(
+          `ルーム「${room?.name ?? ""}」を削除します。よろしいですか？\n（日程・出欠・ゲスト・メンバーなど、このルームの全データが消えます）`
+        )
+      )
+        return;
+
+      const { error } = await supabase.rpc("delete_room", {
+        p_room_id: roomId,
+      });
+      if (error) throw new Error(error.message);
+
+      router.push("/");
+    } catch (e: any) {
+      setError(e?.message ?? "Unknown error");
+    }
+  };
+
   if (loading) return <p className="p-6">Loading...</p>;
 
   return (
@@ -437,15 +460,27 @@ export default function RoomPage() {
           </div>
         </div>
 
-        <button
-          className="btn"
-          onClick={async () => {
-            await supabase.auth.signOut();
-            router.replace("/login");
-          }}
-        >
-          ログアウト
-        </button>
+        <div className="flex flex-col gap-2 items-end">
+          <button
+            className="btn"
+            onClick={async () => {
+              await supabase.auth.signOut();
+              router.replace("/login");
+            }}
+          >
+            ログアウト
+          </button>
+
+          {isOwner && (
+            <button
+              className="btn"
+              style={{ borderColor: "rgba(239, 68, 68, 0.5)", color: "rgb(248, 113, 113)" }}
+              onClick={deleteRoom}
+            >
+              ルーム削除
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (
