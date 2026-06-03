@@ -101,7 +101,6 @@ export default function RoomPage() {
   const [events, setEvents] = useState<Event[]>([]);
 
   // メンバー詳細モーダルで選択中のuser_id
-  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
 
   // candidate追加
   const [newDate, setNewDate] = useState("");
@@ -117,18 +116,8 @@ export default function RoomPage() {
     return members.find((m) => m.user_id === me.id)?.role ?? null;
   }, [me, members]);
 
-  const isOwner = myRole === "owner";
   // owner または admin は運営操作（日程・開催・ゲスト管理）が可能
   const canManage = myRole === "owner" || myRole === "admin";
-
-  const copy = async (text: string, doneMsg: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      alert(doneMsg);
-    } catch {
-      alert("コピーに失敗しました（ブラウザ権限を確認）");
-    }
-  };
 
   const loadAll = async () => {
     setError(null);
@@ -426,114 +415,26 @@ export default function RoomPage() {
     }
   };
 
-  // ✅ ownerのみ：ルーム削除（RPC / DB側でもガード済）
-  const deleteRoom = async () => {
-    setError(null);
-    try {
-      if (!isOwner) throw new Error("ownerのみ実行できます");
-      if (
-        !confirm(
-          `ルーム「${room?.name ?? ""}」を削除します。よろしいですか？\n（日程・出欠・ゲスト・メンバーなど、このルームの全データが消えます）`
-        )
-      )
-        return;
-
-      const { error } = await supabase.rpc("delete_room", {
-        p_room_id: roomId,
-      });
-      if (error) throw new Error(error.message);
-
-      router.push("/");
-    } catch (e: any) {
-      setError(e?.message ?? "Unknown error");
-    }
-  };
-
-  // ✅ ownerのみ：メンバーのロール変更（admin付与/解除 / DB側でもガード済）
-  const setMemberRole = async (userId: string, nextRole: "admin" | "member") => {
-    setError(null);
-    try {
-      if (!isOwner) throw new Error("ロール変更はownerのみ実行できます");
-
-      const { error } = await supabase.rpc("set_member_role", {
-        p_room_id: roomId,
-        p_user_id: userId,
-        p_role: nextRole,
-      });
-      if (error) throw new Error(error.message);
-
-      await loadAll();
-    } catch (e: any) {
-      setError(e?.message ?? "Unknown error");
-    }
-  };
-
-  // 退会させられるか（owner→admin/member、admin→memberのみ、自分・ownerは不可）
-  const canRemove = (m: Member) => {
-    if (!me) return false;
-    if (m.user_id === me.id) return false;
-    if (m.role === "owner") return false;
-    if (myRole === "owner") return m.role === "admin" || m.role === "member";
-    if (myRole === "admin") return m.role === "member";
-    return false;
-  };
-
-  // メンバーをルームから強制退会（権限はDB側でもガード済）
-  const removeMember = async (m: Member) => {
-    setError(null);
-    try {
-      if (!canRemove(m)) throw new Error("このメンバーを退会させる権限がありません");
-      if (!confirm(`「${m.display_name}」をルームから退会させます。よろしいですか？\n（このルームでの出欠も削除されます）`)) return;
-
-      const { error } = await supabase.rpc("remove_room_member", {
-        p_room_id: roomId,
-        p_user_id: m.user_id,
-      });
-      if (error) throw new Error(error.message);
-
-      await loadAll();
-    } catch (e: any) {
-      setError(e?.message ?? "Unknown error");
-    }
-  };
-
   if (loading) return <p className="p-6">Loading...</p>;
 
   return (
     <main className="p-6 max-w-2xl mx-auto">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <Link className="underline text-sm" href="/">
+      <div>
+        <div className="flex items-start justify-between gap-3">
+          <Link className="btn" href="/">
             ← 戻る
           </Link>
-          <h1 className="text-2xl font-bold mt-2">{room?.name ?? "ルーム"}</h1>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <span className="badge">Room ID: {roomId}</span>
-            {myRole ? <span className="badge">あなた：{myRole}</span> : null}
+
+          <div className="flex flex-wrap gap-2 justify-end">
+            <Link className="btn" href={`/room/${roomId}/detail`}>
+              詳細
+            </Link>
+
+            {myRole ? <span className="btn">あなた：{myRole}</span> : null}
           </div>
         </div>
 
-        <div className="flex flex-col gap-2 items-end">
-          <button
-            className="btn"
-            onClick={async () => {
-              await supabase.auth.signOut();
-              router.replace("/login");
-            }}
-          >
-            ログアウト
-          </button>
-
-          {isOwner && (
-            <button
-              className="btn"
-              style={{ borderColor: "rgba(239, 68, 68, 0.5)", color: "rgb(248, 113, 113)" }}
-              onClick={deleteRoom}
-            >
-              ルーム削除
-            </button>
-          )}
-        </div>
+        <h1 className="text-2xl font-bold mt-3">{room?.name ?? "ルーム"}</h1>
       </div>
 
       {error && (
@@ -591,62 +492,61 @@ export default function RoomPage() {
 
               return (
                 <div key={c.id} className="card" style={{ padding: 14 }}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-lg font-semibold">{c.date}</span>
-                        {sum.confirmed ? <span className="badge">開催ライン到達</span> : <span className="badge">調整中</span>}
-                        <span className="badge">最低 {c.min_players} 人</span>
-                      </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-lg font-semibold">{c.date}</span>
+                    {sum.confirmed ? <span className="badge">開催ライン到達</span> : <span className="badge">調整中</span>}
+                    <span className="badge">最低 {c.min_players} 人</span>
+                  </div>
 
-                      <p className="text-xs card-muted mt-1">
-                        集計：◯ {sum.yes}（メンバー {sum.yesMembers} + ゲスト {sum.guestCount}） / △ {sum.maybe} / ×{" "}
-                        {sum.no}
-                      </p>
-                    </div>
+                  <p className="text-xs card-muted mt-1">
+                    集計：◯ {sum.yes}（メンバー {sum.yesMembers} + ゲスト {sum.guestCount}） / △ {sum.maybe} / × {sum.no}
+                  </p>
 
-                    <div className="flex gap-2 items-center flex-wrap justify-end">
+                  {/* あなたの回答 */}
+                  <div className="mt-3">
+                    <p className="text-xs card-muted">あなたの回答</p>
+                    <div className="mt-1 flex gap-2">
                       <button
-                        className="btn"
+                        className="btn flex-1 sm:flex-none sm:w-14"
                         onClick={() => setMyRsvp(c.id, "yes")}
                         style={my === "yes" ? { background: "rgba(6, 78, 59, 0.35)" } : undefined}
                       >
                         ◯
                       </button>
                       <button
-                        className="btn"
+                        className="btn flex-1 sm:flex-none sm:w-14"
                         onClick={() => setMyRsvp(c.id, "maybe")}
                         style={my === "maybe" ? { background: "rgba(6, 78, 59, 0.35)" } : undefined}
                       >
                         △
                       </button>
                       <button
-                        className="btn"
+                        className="btn flex-1 sm:flex-none sm:w-14"
                         onClick={() => setMyRsvp(c.id, "no")}
                         style={my === "no" ? { background: "rgba(6, 78, 59, 0.35)" } : undefined}
                       >
                         ×
                       </button>
+                    </div>
+                  </div>
 
-                      {/* owner/adminだけ + 開催ライン到達で「開催確定」 */}
-                      {canManage && sum.confirmed ? (
+                  {/* 運営操作（owner/admin のみ） */}
+                  {canManage ? (
+                    <div className="mt-3 flex gap-2 flex-wrap">
+                      {sum.confirmed ? (
                         <button className="btn btn-primary" onClick={() => confirmCandidate(c.id)}>
                           開催確定
                         </button>
                       ) : null}
-
-                      {/* ✅ owner/adminのみ：候補削除 */}
-                      {canManage ? (
-                        <button
-                          className="btn"
-                          onClick={() => deleteCandidate(c.id)}
-                          style={{ borderColor: "rgba(239, 68, 68, 0.45)" }}
-                        >
-                          候補削除
-                        </button>
-                      ) : null}
+                      <button
+                        className="btn"
+                        onClick={() => deleteCandidate(c.id)}
+                        style={{ borderColor: "rgba(239, 68, 68, 0.45)" }}
+                      >
+                        候補削除
+                      </button>
                     </div>
-                  </div>
+                  ) : null}
 
                   {/* メンバー出欠 */}
                   <div className="mt-3">
@@ -684,10 +584,11 @@ export default function RoomPage() {
             })}
           </div>
         )}
+      </section>
 
-        {/* ゲスト追加 */}
-        <div className="mt-4 card" style={{ padding: 14 }}>
-          <h3 className="font-semibold">ゲスト追加</h3>
+      {/* ===== ② ゲスト追加 ===== */}
+      <section className="mt-4 card">
+        <h2 className="font-semibold">ゲスト追加</h2>
           <p className="text-sm card-muted mt-1">ゲストは「選択した候補日に確定参加」として◯に加算されます。</p>
 
           <div className="mt-3 flex flex-wrap gap-2 items-end">
@@ -727,11 +628,11 @@ export default function RoomPage() {
               追加
             </button>
           </div>
-        </div>
+      </section>
 
-        {/* ===== ② 開催確定（Step3） ===== */}
-        <div className="mt-4 card" style={{ padding: 14 }}>
-          <h3 className="font-semibold">開催確定</h3>
+      {/* ===== ③ 開催確定 ===== */}
+      <section className="mt-4 card">
+        <h2 className="font-semibold">開催確定</h2>
           <p className="text-sm card-muted mt-1">「開催確定」を押した日程がここに並びます。</p>
 
           {events.length === 0 ? (
@@ -827,133 +728,7 @@ export default function RoomPage() {
               </div>
             </div>
           )}
-        </div>
       </section>
-
-      {/* ===== ③ メンバー ===== */}
-      <section className="mt-4 card">
-        <h2 className="font-semibold">メンバー一覧</h2>
-        {members.length === 0 ? (
-          <p className="text-sm card-muted mt-2">メンバーが見つかりません。</p>
-        ) : (
-          <ul className="mt-3 space-y-2">
-            {members.map((m) => (
-              <li key={m.user_id}>
-                <button
-                  type="button"
-                  onClick={() => setSelectedMemberId(m.user_id)}
-                  className="w-full flex items-center justify-between gap-2 text-left rounded-lg px-2 py-2 -mx-2 hover:bg-white/5 active:bg-white/10"
-                >
-                  <span className="flex items-center gap-2 min-w-0">
-                    <span className="badge shrink-0">{m.role}</span>
-                    <span className="text-sm truncate">
-                      {m.display_name}
-                      {m.user_id === me?.id ? "（あなた）" : ""}
-                    </span>
-                  </span>
-                  <span className="card-muted text-sm shrink-0">詳細 ›</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* ===== ④ 招待 ===== */}
-      <section className="mt-4 card">
-        <h2 className="font-semibold">招待</h2>
-        <p className="text-sm card-muted mt-1">URLを送るか、招待コードを送れば参加できます。</p>
-
-        {!room?.invite_code ? (
-          <p className="text-sm mt-3" style={{ color: "rgba(236,253,245,0.85)" }}>
-            招待コードが見つかりません（rooms.invite_code を確認してね）
-          </p>
-        ) : (
-          <>
-            <div className="mt-4">
-              <p className="text-xs card-muted">招待URL</p>
-              <p className="text-sm font-mono mt-1 break-all">{`${window.location.origin}/join/${room.invite_code}`}</p>
-              <button
-                className="btn mt-2"
-                onClick={() => copy(`${window.location.origin}/join/${room.invite_code}`, "招待URLをコピーしました！")}
-              >
-                URLコピー
-              </button>
-            </div>
-
-            <div className="mt-4">
-              <p className="text-xs card-muted">招待コード</p>
-              <p className="text-sm font-mono mt-1">{room.invite_code}</p>
-              <button className="btn mt-2" onClick={() => copy(room.invite_code!, "招待コードをコピーしました！")}>
-                コードコピー
-              </button>
-            </div>
-          </>
-        )}
-      </section>
-
-      {/* ===== メンバー詳細モーダル ===== */}
-      {(() => {
-        const sel = selectedMemberId
-          ? members.find((m) => m.user_id === selectedMemberId) ?? null
-          : null;
-        if (!sel) return null;
-
-        const canToggleRole = isOwner && sel.role !== "owner" && sel.user_id !== me?.id;
-        const showRemove = canRemove(sel);
-
-        return (
-          <div
-            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/50"
-            onClick={() => setSelectedMemberId(null)}
-          >
-            <div className="card w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <h3 className="text-lg font-bold truncate">
-                    {sel.display_name}
-                    {sel.user_id === me?.id ? "（あなた）" : ""}
-                  </h3>
-                  <div className="mt-1">
-                    <span className="badge">{sel.role}</span>
-                  </div>
-                </div>
-                <button className="btn shrink-0" onClick={() => setSelectedMemberId(null)}>
-                  閉じる
-                </button>
-              </div>
-
-              <div className="mt-4 flex flex-col gap-2">
-                {canToggleRole ? (
-                  sel.role === "admin" ? (
-                    <button className="btn" onClick={() => setMemberRole(sel.user_id, "member")}>
-                      管理者を解除する
-                    </button>
-                  ) : (
-                    <button className="btn" onClick={() => setMemberRole(sel.user_id, "admin")}>
-                      管理者にする
-                    </button>
-                  )
-                ) : null}
-
-                {showRemove ? (
-                  <button
-                    className="btn"
-                    style={{ borderColor: "rgba(239, 68, 68, 0.5)", color: "rgb(248, 113, 113)" }}
-                    onClick={() => removeMember(sel)}
-                  >
-                    ルームから退会させる
-                  </button>
-                ) : null}
-
-                {!canToggleRole && !showRemove ? (
-                  <p className="card-muted text-sm">このメンバーに対してできる操作はありません。</p>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
     </main>
   );
 }

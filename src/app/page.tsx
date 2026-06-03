@@ -17,7 +17,6 @@ export default function Home() {
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
-  const [email, setEmail] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState<string | null>(null);
 
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -46,8 +45,6 @@ export default function Home() {
         router.push("/login");
         return;
       }
-
-      setEmail(userData.user.email ?? null);
 
       const { data: prof } = await supabase
         .from("profiles")
@@ -157,33 +154,6 @@ export default function Home() {
     }
   };
 
-  // ✅ ownerのみ：ルーム削除（RPC / DB側でもガード済）
-  const deleteRoom = async (room: Room) => {
-    setError(null);
-
-    if (room.role !== "owner") {
-      setError("ルームの削除はオーナーのみ実行できます");
-      return;
-    }
-    if (
-      !confirm(
-        `ルーム「${room.name}」を削除します。よろしいですか？\n（日程・出欠・ゲスト・メンバーなど、このルームの全データが消えます）`
-      )
-    )
-      return;
-
-    try {
-      const { error } = await supabase.rpc("delete_room", {
-        p_room_id: room.id,
-      });
-      if (error) throw new Error(error.message);
-
-      await load();
-    } catch (e: any) {
-      setError(e?.message ?? "Unknown error");
-    }
-  };
-
   const goJoin = () => {
     const code = inviteCode.trim();
     if (!code) return;
@@ -204,21 +174,18 @@ export default function Home() {
         <div>
           <h1 className="text-2xl font-bold">麻雀出欠ボード</h1>
           <p className="text-sm card-muted mt-1">
-            ログイン中：{displayName ?? "未設定"}（{email ?? "unknown"}）
+            ログイン中：{displayName ?? "未設定"}
           </p>
-          <div className="mt-1 flex gap-3 flex-wrap">
-            <Link className="underline text-sm" href="/settings">
-              設定（ユーザー名変更）
-            </Link>
-            <Link className="underline text-sm" href="/settings">
-              メール/パスワード変更
-            </Link>
-          </div>
         </div>
 
-        <button className="btn" onClick={signOut}>
-          ログアウト
-        </button>
+        <div className="flex gap-2 shrink-0">
+          <Link className="btn" href="/settings">
+            設定
+          </Link>
+          <button className="btn" onClick={signOut}>
+            ログアウト
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -236,36 +203,15 @@ export default function Home() {
         ) : (
           <ul className="mt-3 space-y-2">
             {rooms.map((r) => (
-              <li key={r.id} className="card" style={{ padding: 14 }}>
-                <div className="flex items-start justify-between gap-2">
-                  <Link className="font-semibold underline" href={`/room/${r.id}`}>
-                    {r.name}
-                  </Link>
-
-                  {r.role === "owner" && (
-                    <button
-                      className="btn"
-                      style={{ borderColor: "rgba(239, 68, 68, 0.5)", color: "rgb(248, 113, 113)" }}
-                      onClick={() => deleteRoom(r)}
-                    >
-                      削除
-                    </button>
-                  )}
-                </div>
-
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  {r.role === "owner" && <span className="badge">オーナー</span>}
-                  {r.invite_code ? (
-                    <>
-                      <span className="badge">招待コード：{r.invite_code}</span>
-                      <button className="btn" onClick={() => copy(`${location.origin}/join/${r.invite_code}`)}>
-                        招待URLコピー
-                      </button>
-                    </>
-                  ) : (
-                    <span className="badge">（招待コード未設定）</span>
-                  )}
-                </div>
+              <li key={r.id}>
+                <Link
+                  href={`/room/${r.id}`}
+                  className="card flex items-center justify-between gap-2 hover:bg-white/5 active:bg-white/10"
+                  style={{ padding: 14 }}
+                >
+                  <span className="font-semibold truncate">{r.name}</span>
+                  <span className="card-muted text-sm shrink-0">開く ›</span>
+                </Link>
               </li>
             ))}
           </ul>

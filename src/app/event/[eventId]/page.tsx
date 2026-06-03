@@ -348,7 +348,7 @@ export default function EventPage() {
     <main className="p-6 max-w-2xl mx-auto">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <Link className="underline text-sm" href={`/room/${event.room_id}`}>
+          <Link className="btn" href={`/room/${event.room_id}`}>
             ← ルームへ戻る
           </Link>
           <h1 className="text-2xl font-bold mt-2">開催詳細</h1>
