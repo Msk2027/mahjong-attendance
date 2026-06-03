@@ -100,6 +100,9 @@ export default function RoomPage() {
   const [guests, setGuests] = useState<Guest[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
 
+  // メンバー詳細モーダルで選択中のuser_id
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+
   // candidate追加
   const [newDate, setNewDate] = useState("");
   const [newMinPlayers, setNewMinPlayers] = useState<number>(4);
@@ -835,40 +838,21 @@ export default function RoomPage() {
         ) : (
           <ul className="mt-3 space-y-2">
             {members.map((m) => (
-              <li
-                key={m.user_id}
-                className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="badge shrink-0">{m.role}</span>
-                  <span className="text-sm truncate">{m.display_name}</span>
-                </div>
-
-                <div className="flex flex-wrap gap-2 shrink-0">
-                  {/* ✅ ownerのみ：member↔admin の切り替え（owner自身・他のownerは対象外） */}
-                  {isOwner && m.role !== "owner" && m.user_id !== me?.id ? (
-                    m.role === "admin" ? (
-                      <button className="btn" onClick={() => setMemberRole(m.user_id, "member")}>
-                        管理者を解除
-                      </button>
-                    ) : (
-                      <button className="btn" onClick={() => setMemberRole(m.user_id, "admin")}>
-                        管理者にする
-                      </button>
-                    )
-                  ) : null}
-
-                  {/* 強制退会（owner→admin/member、admin→memberのみ） */}
-                  {canRemove(m) ? (
-                    <button
-                      className="btn"
-                      style={{ borderColor: "rgba(239, 68, 68, 0.5)", color: "rgb(248, 113, 113)" }}
-                      onClick={() => removeMember(m)}
-                    >
-                      退会させる
-                    </button>
-                  ) : null}
-                </div>
+              <li key={m.user_id}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedMemberId(m.user_id)}
+                  className="w-full flex items-center justify-between gap-2 text-left rounded-lg px-2 py-2 -mx-2 hover:bg-white/5 active:bg-white/10"
+                >
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className="badge shrink-0">{m.role}</span>
+                    <span className="text-sm truncate">
+                      {m.display_name}
+                      {m.user_id === me?.id ? "（あなた）" : ""}
+                    </span>
+                  </span>
+                  <span className="card-muted text-sm shrink-0">詳細 ›</span>
+                </button>
               </li>
             ))}
           </ul>
@@ -907,6 +891,69 @@ export default function RoomPage() {
           </>
         )}
       </section>
+
+      {/* ===== メンバー詳細モーダル ===== */}
+      {(() => {
+        const sel = selectedMemberId
+          ? members.find((m) => m.user_id === selectedMemberId) ?? null
+          : null;
+        if (!sel) return null;
+
+        const canToggleRole = isOwner && sel.role !== "owner" && sel.user_id !== me?.id;
+        const showRemove = canRemove(sel);
+
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/50"
+            onClick={() => setSelectedMemberId(null)}
+          >
+            <div className="card w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h3 className="text-lg font-bold truncate">
+                    {sel.display_name}
+                    {sel.user_id === me?.id ? "（あなた）" : ""}
+                  </h3>
+                  <div className="mt-1">
+                    <span className="badge">{sel.role}</span>
+                  </div>
+                </div>
+                <button className="btn shrink-0" onClick={() => setSelectedMemberId(null)}>
+                  閉じる
+                </button>
+              </div>
+
+              <div className="mt-4 flex flex-col gap-2">
+                {canToggleRole ? (
+                  sel.role === "admin" ? (
+                    <button className="btn" onClick={() => setMemberRole(sel.user_id, "member")}>
+                      管理者を解除する
+                    </button>
+                  ) : (
+                    <button className="btn" onClick={() => setMemberRole(sel.user_id, "admin")}>
+                      管理者にする
+                    </button>
+                  )
+                ) : null}
+
+                {showRemove ? (
+                  <button
+                    className="btn"
+                    style={{ borderColor: "rgba(239, 68, 68, 0.5)", color: "rgb(248, 113, 113)" }}
+                    onClick={() => removeMember(sel)}
+                  >
+                    ルームから退会させる
+                  </button>
+                ) : null}
+
+                {!canToggleRole && !showRemove ? (
+                  <p className="card-muted text-sm">このメンバーに対してできる操作はありません。</p>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </main>
   );
 }
