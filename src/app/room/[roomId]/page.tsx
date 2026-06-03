@@ -465,6 +465,35 @@ export default function RoomPage() {
     }
   };
 
+  // 退会させられるか（owner→admin/member、admin→memberのみ、自分・ownerは不可）
+  const canRemove = (m: Member) => {
+    if (!me) return false;
+    if (m.user_id === me.id) return false;
+    if (m.role === "owner") return false;
+    if (myRole === "owner") return m.role === "admin" || m.role === "member";
+    if (myRole === "admin") return m.role === "member";
+    return false;
+  };
+
+  // メンバーをルームから強制退会（権限はDB側でもガード済）
+  const removeMember = async (m: Member) => {
+    setError(null);
+    try {
+      if (!canRemove(m)) throw new Error("このメンバーを退会させる権限がありません");
+      if (!confirm(`「${m.display_name}」をルームから退会させます。よろしいですか？\n（このルームでの出欠も削除されます）`)) return;
+
+      const { error } = await supabase.rpc("remove_room_member", {
+        p_room_id: roomId,
+        p_user_id: m.user_id,
+      });
+      if (error) throw new Error(error.message);
+
+      await loadAll();
+    } catch (e: any) {
+      setError(e?.message ?? "Unknown error");
+    }
+  };
+
   if (loading) return <p className="p-6">Loading...</p>;
 
   return (
@@ -812,18 +841,31 @@ export default function RoomPage() {
                   <span className="text-sm">{m.display_name}</span>
                 </div>
 
-                {/* ✅ ownerのみ：member↔admin の切り替え（owner自身・他のownerは対象外） */}
-                {isOwner && m.role !== "owner" && m.user_id !== me?.id ? (
-                  m.role === "admin" ? (
-                    <button className="btn" onClick={() => setMemberRole(m.user_id, "member")}>
-                      管理者を解除
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  {/* ✅ ownerのみ：member↔admin の切り替え（owner自身・他のownerは対象外） */}
+                  {isOwner && m.role !== "owner" && m.user_id !== me?.id ? (
+                    m.role === "admin" ? (
+                      <button className="btn" onClick={() => setMemberRole(m.user_id, "member")}>
+                        管理者を解除
+                      </button>
+                    ) : (
+                      <button className="btn" onClick={() => setMemberRole(m.user_id, "admin")}>
+                        管理者にする
+                      </button>
+                    )
+                  ) : null}
+
+                  {/* 強制退会（owner→admin/member、admin→memberのみ） */}
+                  {canRemove(m) ? (
+                    <button
+                      className="btn"
+                      style={{ borderColor: "rgba(239, 68, 68, 0.5)", color: "rgb(248, 113, 113)" }}
+                      onClick={() => removeMember(m)}
+                    >
+                      退会させる
                     </button>
-                  ) : (
-                    <button className="btn" onClick={() => setMemberRole(m.user_id, "admin")}>
-                      管理者にする
-                    </button>
-                  )
-                ) : null}
+                  ) : null}
+                </div>
               </li>
             ))}
           </ul>
