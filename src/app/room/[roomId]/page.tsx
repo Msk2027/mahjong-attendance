@@ -835,13 +835,16 @@ export default function RoomPage() {
         ) : (
           <ul className="mt-3 space-y-2">
             {members.map((m) => (
-              <li key={m.user_id} className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="badge">{m.role}</span>
-                  <span className="text-sm">{m.display_name}</span>
+              <li
+                key={m.user_id}
+                className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="badge shrink-0">{m.role}</span>
+                  <span className="text-sm truncate">{m.display_name}</span>
                 </div>
 
-                <div className="flex items-center gap-2 flex-wrap justify-end">
+                <div className="flex flex-wrap gap-2 shrink-0">
                   {/* ✅ ownerのみ：member↔admin の切り替え（owner自身・他のownerは対象外） */}
                   {isOwner && m.role !== "owner" && m.user_id !== me?.id ? (
                     m.role === "admin" ? (
